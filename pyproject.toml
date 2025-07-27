@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "kvm-clone"
+version = "0.1.0"
+description = "KVM cloning utility"
+authors = ["tomaz"]
+readme = "README.md"
+packages = [{include = "kvm_clone", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+paramiko = "^3.5.1"
+libvirt-python = "^11.5.0"
+click = "^8.2.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^6.0.0"
+mypy = "^1.17.0"
+types-paramiko = "^3.4.0"
+types-click = "^7.1.8"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+strict_equality = true
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
