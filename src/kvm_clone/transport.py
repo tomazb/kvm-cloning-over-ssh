@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 from .models import SSHConnectionInfo, TransferStats
 from .exceptions import SSHError, AuthenticationError, ConnectionError, TimeoutError
+from .security import SSHSecurity
 
 
 class SSHConnection:
@@ -34,7 +35,8 @@ class SSHConnection:
         """Establish SSH connection."""
         try:
             self.client = paramiko.SSHClient()
-            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            # Use secure host key policy instead of AutoAddPolicy
+            self.client.set_missing_host_key_policy(SSHSecurity.get_known_hosts_policy())
             
             # Prepare connection parameters
             connect_kwargs = {
@@ -45,11 +47,9 @@ class SSHConnection:
             
             # Add authentication
             if self.key_path:
-                key_path = Path(self.key_path).expanduser()
-                if key_path.exists():
-                    connect_kwargs['key_filename'] = str(key_path)
-                else:
-                    raise AuthenticationError(f"SSH key not found: {key_path}", self.host)
+                # Validate SSH key path for security
+                validated_key_path = SSHSecurity.validate_ssh_key_path(self.key_path)
+                connect_kwargs['key_filename'] = validated_key_path
             
             if self.username:
                 connect_kwargs['username'] = self.username

@@ -12,8 +12,9 @@ from .models import (
 )
 from .exceptions import (
     KVMCloneError, ConfigurationError, ConnectionError,
-    VMNotFoundError, VMExistsError, TransferError
+    VMNotFoundError, VMExistsError, TransferError, ValidationError
 )
+from .security import SecurityValidator, CommandBuilder, SSHSecurity
 
 __all__ = [
     "__version__", "__author__", "__description__",
@@ -21,5 +22,6 @@ __all__ = [
     "CloneOptions", "SyncOptions", "CloneResult", "SyncResult",
     "VMInfo", "ProgressInfo", "OperationStatus",
     "KVMCloneError", "ConfigurationError", "ConnectionError",
-    "VMNotFoundError", "VMExistsError", "TransferError"
+    "VMNotFoundError", "VMExistsError", "TransferError", "ValidationError",
+    "SecurityValidator", "CommandBuilder", "SSHSecurity"
 ]

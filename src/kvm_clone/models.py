@@ -26,7 +26,7 @@ class OperationType(Enum):
     LIST = "list"
 
 
-class OperationStatus(Enum):
+class OperationStatusEnum(Enum):
     """Operation status values."""
     PENDING = "pending"
     RUNNING = "running"
@@ -103,7 +103,7 @@ class ProgressInfo:
     total_bytes: int
     speed: float  # bytes/sec
     eta: Optional[int]  # seconds
-    status: OperationStatus
+    status: OperationStatusEnum
     message: Optional[str] = None
     current_file: Optional[str] = None
 
@@ -162,7 +162,7 @@ class OperationStatus:
     """Status of an operation."""
     operation_id: str
     operation_type: OperationType
-    status: OperationStatus
+    status: OperationStatusEnum
     progress: Optional[ProgressInfo] = None
     result: Optional[Union[CloneResult, SyncResult]] = None
     created: datetime = field(default_factory=datetime.now)

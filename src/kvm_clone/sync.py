@@ -10,10 +10,11 @@ import uuid
 from typing import Optional, Callable
 from datetime import datetime
 
-from .models import SyncOptions, SyncResult, ProgressInfo, DeltaInfo, OperationType, OperationStatus
-from .exceptions import VMNotFoundError, TransferError
+from .models import SyncOptions, SyncResult, ProgressInfo, DeltaInfo, OperationType, OperationStatusEnum
+from .exceptions import VMNotFoundError, TransferError, ValidationError
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
+from .security import SecurityValidator, CommandBuilder
 
 
 class VMSynchronizer:
@@ -93,7 +94,7 @@ class VMSynchronizer:
                             total_bytes=total_bytes,
                             speed=0.0,
                             eta=None,
-                            status=OperationStatus.RUNNING,
+                            status=OperationStatusEnum.RUNNING,
                             message=f"Synchronizing disk {source_disk.target}",
                             current_file=source_disk.path
                         ))
@@ -206,10 +207,21 @@ class VMSynchronizer:
     async def _create_checkpoint(self, host: str, vm_name: str) -> None:
         """Create a checkpoint/snapshot before synchronization."""
         try:
+            # Validate inputs
+            host = SecurityValidator.validate_hostname(host)
+            vm_name = SecurityValidator.validate_vm_name(vm_name)
+            
             async with self.transport.connect(host) as conn:
-                # Create a snapshot using virsh
+                # Create a snapshot using secure virsh command
                 snapshot_name = f"{vm_name}_sync_checkpoint_{int(datetime.now().timestamp())}"
-                command = f"virsh snapshot-create-as {vm_name} {snapshot_name} 'Pre-sync checkpoint'"
+                snapshot_name = SecurityValidator.validate_snapshot_name(snapshot_name)
+                
+                command = CommandBuilder.build_virsh_command(
+                    "snapshot-create-as",
+                    vm_name,
+                    snapshot_name,
+                    "Pre-sync checkpoint"
+                )
                 
                 stdout, stderr, exit_code = await conn.execute_command(command)
                 
@@ -218,6 +230,8 @@ class VMSynchronizer:
                 else:
                     self.logger.info(f"Created checkpoint {snapshot_name} for {vm_name}")
                     
+        except ValidationError as e:
+            self.logger.warning(f"Checkpoint creation failed due to validation error: {e}")
         except Exception as e:
             self.logger.warning(f"Checkpoint creation failed: {e}")
     
@@ -247,25 +261,38 @@ class VMSynchronizer:
             dict: Sync statistics
         """
         try:
-            # Build rsync command for incremental sync
-            rsync_cmd = ["rsync", "-avz", "--progress"]
+            # Validate inputs
+            source_host = SecurityValidator.validate_hostname(source_host)
+            dest_host = SecurityValidator.validate_hostname(dest_host)
+            
+            # Build secure rsync command
+            additional_options = []
             
             # Add bandwidth limit if specified
             if sync_options.bandwidth_limit:
-                rsync_cmd.extend(["--bwlimit", sync_options.bandwidth_limit])
+                # Bandwidth limit validation is done in CommandBuilder.build_rsync_command
+                pass
             
-            # Add source and destination
             if source_host == dest_host:
                 # Local sync
-                rsync_cmd.extend([source_path, dest_path])
-                command = " ".join(rsync_cmd)
+                command = CommandBuilder.build_rsync_command(
+                    source_path=source_path,
+                    dest_path=dest_path,
+                    bandwidth_limit=sync_options.bandwidth_limit,
+                    additional_options=additional_options
+                )
                 
                 async with self.transport.connect(source_host) as conn:
                     stdout, stderr, exit_code = await conn.execute_command(command)
             else:
                 # Remote sync
-                rsync_cmd.extend([source_path, f"{dest_host}:{dest_path}"])
-                command = " ".join(rsync_cmd)
+                command = CommandBuilder.build_rsync_command(
+                    source_path=source_path,
+                    dest_path=dest_path,
+                    dest_host=dest_host,
+                    bandwidth_limit=sync_options.bandwidth_limit,
+                    additional_options=additional_options
+                )
                 
                 async with self.transport.connect(source_host) as conn:
                     stdout, stderr, exit_code = await conn.execute_command(command)
@@ -284,5 +311,7 @@ class VMSynchronizer:
                 'blocks_synchronized': blocks_synchronized
             }
             
+        except ValidationError as e:
+            raise TransferError(f"Validation error: {e}", source_host, dest_host)
         except Exception as e:
             raise TransferError(str(e), source_host, dest_host)

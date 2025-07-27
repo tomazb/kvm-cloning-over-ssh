@@ -12,10 +12,11 @@ from typing import Optional, Callable
 from datetime import datetime
 from pathlib import Path
 
-from .models import CloneOptions, CloneResult, ProgressInfo, ValidationResult, OperationType, OperationStatus
+from .models import CloneOptions, CloneResult, ProgressInfo, ValidationResult, OperationType, OperationStatusEnum
 from .exceptions import VMNotFoundError, VMExistsError, TransferError, ValidationError
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
+from .security import SecurityValidator, CommandBuilder
 
 
 class VMCloner:
@@ -108,7 +109,7 @@ class VMCloner:
                             total_bytes=total_bytes,
                             speed=0.0,
                             eta=None,
-                            status=OperationStatus.RUNNING,
+                            status=OperationStatusEnum.RUNNING,
                             message=f"Transferring disk {disk.target}",
                             current_file=disk.path
                         ))
@@ -244,20 +245,33 @@ class VMCloner:
             str: Destination path of transferred disk
         """
         try:
-            # Generate destination path
-            source_file = Path(source_path)
-            dest_path = f"/var/lib/libvirt/images/{new_vm_name}_{source_file.name}"
+            # Validate inputs
+            source_host = SecurityValidator.validate_hostname(source_host)
+            dest_host = SecurityValidator.validate_hostname(dest_host)
+            new_vm_name = SecurityValidator.validate_vm_name(new_vm_name)
             
-            # For now, use a simple rsync-based transfer
-            # In a production implementation, this would use more sophisticated methods
+            # Generate destination path with path traversal protection
+            source_file = Path(source_path)
+            base_dir = "/var/lib/libvirt/images"
+            dest_filename = f"{new_vm_name}_{source_file.name}"
+            dest_path = SecurityValidator.sanitize_path(dest_filename, base_dir)
+            
+            # Build secure command
             async with self.transport.connect(source_host) as source_conn:
-                # Create a compressed copy command
                 if dest_host == source_host:
-                    # Local copy
-                    command = f"cp {source_path} {dest_path}"
+                    # Local copy using secure command building
+                    command = CommandBuilder.build_safe_command(
+                        "cp {source} {dest}",
+                        source=source_path,
+                        dest=dest_path
+                    )
                 else:
-                    # Remote copy via rsync
-                    command = f"rsync -avz --progress {source_path} {dest_host}:{dest_path}"
+                    # Remote copy using secure rsync command
+                    command = CommandBuilder.build_rsync_command(
+                        source_path=source_path,
+                        dest_path=dest_path,
+                        dest_host=dest_host
+                    )
                 
                 stdout, stderr, exit_code = await source_conn.execute_command(command)
                 
@@ -266,5 +280,7 @@ class VMCloner:
             
             return dest_path
             
+        except ValidationError as e:
+            raise TransferError(f"Validation error: {e}", source_host, dest_host)
         except Exception as e:
             raise TransferError(str(e), source_host, dest_host)
