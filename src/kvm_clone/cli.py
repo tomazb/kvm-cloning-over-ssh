@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""
+Command-line interface for KVM cloning operations.
+
+This module provides the CLI interface as specified in the API documentation.
+"""
+
+import asyncio
+import logging
+import sys
+from pathlib import Path
+from typing import Optional
+
+import click
+import yaml
+
+from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
+from kvm_clone.exceptions import KVMCloneError
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+
+def setup_logging(verbose: bool, quiet: bool, log_level: str) -> None:
+    """Setup logging configuration."""
+    if quiet:
+        level = logging.ERROR
+    elif verbose:
+        level = logging.DEBUG
+    else:
+        level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    logging.getLogger().setLevel(level)
+
+
+def load_config(config_path: str) -> dict:
+    """Load configuration from file."""
+    config_file = Path(config_path).expanduser()
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            click.echo(f"Warning: Failed to load config from {config_path}: {e}", err=True)
+    return {}
+
+
+def progress_callback(progress_info):
+    """Progress callback for operations."""
+    click.echo(f"\rProgress: {progress_info.progress_percent:.1f}% "
+              f"({progress_info.bytes_transferred}/{progress_info.total_bytes} bytes) "
+              f"Speed: {progress_info.speed/1024/1024:.1f} MB/s", nl=False)
+
+
+@click.group()
+@click.option('--config', '-c', default='~/.kvm-clone/config.yaml', 
+              help='Configuration file path')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
+@click.option('--quiet', '-q', is_flag=True, help='Suppress non-error output')
+@click.option('--output', '-o', type=click.Choice(['text', 'json', 'yaml']), 
+              default='text', help='Output format')
+@click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARN', 'ERROR']), 
+              default='INFO', help='Log level')
+@click.version_option()
+@click.pass_context
+def cli(ctx, config, verbose, quiet, output, log_level):
+    """KVM cloning over SSH tool."""
+    setup_logging(verbose, quiet, log_level)
+    
+    # Load configuration
+    config_data = load_config(config)
+    
+    # Store in context
+    ctx.ensure_object(dict)
+    ctx.obj['config'] = config_data
+    ctx.obj['output_format'] = output
+    ctx.obj['verbose'] = verbose
+    ctx.obj['quiet'] = quiet
+
+
+@cli.command()
+@click.argument('source_host')
+@click.argument('dest_host')
+@click.argument('vm_name')
+@click.option('--new-name', '-n', help='Name for cloned VM')
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing VM')
+@click.option('--dry-run', is_flag=True, help='Show what would be done')
+@click.option('--parallel', '-p', type=int, default=4, help='Number of parallel transfers')
+@click.option('--compress', is_flag=True, help='Enable compression during transfer')
+@click.option('--verify', is_flag=True, default=True, help='Verify integrity after transfer')
+@click.option('--timeout', type=int, default=3600, help='Operation timeout in seconds')
+@click.option('--ssh-key', '-k', help='SSH private key path')
+@click.option('--ssh-port', type=int, default=22, help='SSH port')
+@click.option('--preserve-mac', is_flag=True, help='Preserve MAC addresses')
+@click.option('--network-config', type=click.Path(exists=True), help='Custom network configuration file')
+@click.pass_context
+def clone(ctx, source_host, dest_host, vm_name, new_name, force, dry_run, 
+          parallel, compress, verify, timeout, ssh_key, ssh_port, preserve_mac, 
+          network_config):
+    """Clone a virtual machine from source to destination host."""
+    
+    async def run_clone():
+        try:
+            # Load network config if provided
+            network_cfg = None
+            if network_config:
+                with open(network_config, 'r') as f:
+                    network_cfg = yaml.safe_load(f)
+            
+            # Create client
+            client_config = ctx.obj['config'].copy()
+            if ssh_key:
+                client_config['ssh_key_path'] = ssh_key
+            
+            async with KVMCloneClient(config=client_config, timeout=timeout) as client:
+                clone_options = CloneOptions(
+                    new_name=new_name,
+                    force=force,
+                    dry_run=dry_run,
+                    parallel=parallel,
+                    compress=compress,
+                    verify=verify,
+                    preserve_mac=preserve_mac,
+                    network_config=network_cfg
+                )
+                
+                if not ctx.obj['quiet']:
+                    click.echo(f"Cloning VM '{vm_name}' from {source_host} to {dest_host}...")
+                
+                result = await client.clone_vm(
+                    source_host=source_host,
+                    dest_host=dest_host,
+                    vm_name=vm_name,
+                    **clone_options.__dict__,
+                    progress_callback=progress_callback if not ctx.obj['quiet'] else None
+                )
+                
+                if not ctx.obj['quiet']:
+                    click.echo()  # New line after progress
+                
+                if result.success:
+                    click.echo(f"✓ Successfully cloned VM '{vm_name}' to '{result.new_vm_name}'")
+                    click.echo(f"  Duration: {result.duration:.1f}s")
+                    click.echo(f"  Bytes transferred: {result.bytes_transferred}")
+                    
+                    if result.warnings:
+                        for warning in result.warnings:
+                            click.echo(f"  Warning: {warning}", err=True)
+                else:
+                    click.echo(f"✗ Clone failed: {result.error}", err=True)
+                    sys.exit(1)
+                    
+        except KVMCloneError as e:
+            click.echo(f"✗ Error: {e}", err=True)
+            sys.exit(e.error_code)
+        except Exception as e:
+            click.echo(f"✗ Unexpected error: {e}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(run_clone())
+
+
+@cli.command()
+@click.argument('source_host')
+@click.argument('dest_host')
+@click.argument('vm_name')
+@click.option('--target-name', '-t', help='Target VM name on destination')
+@click.option('--checkpoint', is_flag=True, help='Create checkpoint before sync')
+@click.option('--delta-only', is_flag=True, default=True, help='Transfer only changed blocks')
+@click.option('--bandwidth-limit', '-b', help='Bandwidth limit (e.g., "100M", "1G")')
+@click.option('--ssh-key', '-k', help='SSH private key path')
+@click.option('--timeout', type=int, default=7200, help='Operation timeout in seconds')
+@click.pass_context
+def sync(ctx, source_host, dest_host, vm_name, target_name, checkpoint, 
+         delta_only, bandwidth_limit, ssh_key, timeout):
+    """Synchronize an existing VM between hosts (incremental transfer)."""
+    
+    async def run_sync():
+        try:
+            # Create client
+            client_config = ctx.obj['config'].copy()
+            if ssh_key:
+                client_config['ssh_key_path'] = ssh_key
+            
+            async with KVMCloneClient(config=client_config, timeout=timeout) as client:
+                sync_options = SyncOptions(
+                    target_name=target_name,
+                    checkpoint=checkpoint,
+                    delta_only=delta_only,
+                    bandwidth_limit=bandwidth_limit
+                )
+                
+                if not ctx.obj['quiet']:
+                    click.echo(f"Synchronizing VM '{vm_name}' from {source_host} to {dest_host}...")
+                
+                result = await client.sync_vm(
+                    source_host=source_host,
+                    dest_host=dest_host,
+                    vm_name=vm_name,
+                    **sync_options.__dict__,
+                    progress_callback=progress_callback if not ctx.obj['quiet'] else None
+                )
+                
+                if not ctx.obj['quiet']:
+                    click.echo()  # New line after progress
+                
+                if result.success:
+                    click.echo(f"✓ Successfully synchronized VM '{vm_name}'")
+                    click.echo(f"  Duration: {result.duration:.1f}s")
+                    click.echo(f"  Bytes transferred: {result.bytes_transferred}")
+                    click.echo(f"  Blocks synchronized: {result.blocks_synchronized}")
+                else:
+                    click.echo(f"✗ Sync failed: {result.error}", err=True)
+                    sys.exit(1)
+                    
+        except KVMCloneError as e:
+            click.echo(f"✗ Error: {e}", err=True)
+            sys.exit(e.error_code)
+        except Exception as e:
+            click.echo(f"✗ Unexpected error: {e}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(run_sync())
+
+
+@cli.command()
+@click.argument('hosts', nargs=-1)
+@click.option('--status', '-s', type=click.Choice(['all', 'running', 'stopped', 'paused']), 
+              default='all', help='Filter by status')
+@click.option('--format', type=click.Choice(['table', 'list', 'json']), 
+              default='table', help='Output format')
+@click.option('--ssh-key', '-k', help='SSH private key path')
+@click.pass_context
+def list_vms(ctx, hosts, status, format, ssh_key):
+    """List virtual machines on specified hosts."""
+    
+    async def run_list():
+        try:
+            if not hosts:
+                hosts_list = ['localhost']
+            else:
+                hosts_list = list(hosts)
+            
+            # Create client
+            client_config = ctx.obj['config'].copy()
+            if ssh_key:
+                client_config['ssh_key_path'] = ssh_key
+            
+            async with KVMCloneClient(config=client_config) as client:
+                results = await client.list_vms(hosts_list, status_filter=status)
+                
+                if format == 'table':
+                    for host, vms in results.items():
+                        click.echo(f"\n{host}:")
+                        if vms:
+                            click.echo(f"{'Name':<20} {'State':<10} {'Memory':<8} {'vCPUs':<6}")
+                            click.echo("-" * 50)
+                            for vm in vms:
+                                click.echo(f"{vm.name:<20} {vm.state.value:<10} {vm.memory:<8} {vm.vcpus:<6}")
+                        else:
+                            click.echo("  No VMs found")
+                elif format == 'json':
+                    import json
+                    # Convert to JSON-serializable format
+                    json_data = {}
+                    for host, vms in results.items():
+                        json_data[host] = [
+                            {
+                                'name': vm.name,
+                                'state': vm.state.value,
+                                'memory': vm.memory,
+                                'vcpus': vm.vcpus,
+                                'uuid': vm.uuid
+                            }
+                            for vm in vms
+                        ]
+                    click.echo(json.dumps(json_data, indent=2))
+                    
+        except KVMCloneError as e:
+            click.echo(f"✗ Error: {e}", err=True)
+            sys.exit(e.error_code)
+        except Exception as e:
+            click.echo(f"✗ Unexpected error: {e}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(run_list())
+
+
+@cli.group()
+def config():
+    """Manage configuration settings."""
+    pass
+
+
+@config.command('show')
+@click.pass_context
+def config_show(ctx):
+    """Display current configuration."""
+    config_data = ctx.obj['config']
+    if config_data:
+        click.echo(yaml.dump(config_data, default_flow_style=False))
+    else:
+        click.echo("No configuration found")
+
+
+@config.command('init')
+@click.option('--config-dir', default='~/.kvm-clone', help='Configuration directory')
+def config_init(config_dir):
+    """Initialize default configuration."""
+    config_path = Path(config_dir).expanduser()
+    config_path.mkdir(parents=True, exist_ok=True)
+    
+    config_file = config_path / 'config.yaml'
+    
+    default_config = {
+        'ssh_key_path': '~/.ssh/id_rsa',
+        'ssh_port': 22,
+        'parallel_transfers': 4,
+        'verify_transfers': True,
+        'compress_transfers': False,
+        'timeout': 3600
+    }
+    
+    with open(config_file, 'w') as f:
+        yaml.dump(default_config, f, default_flow_style=False)
+    
+    click.echo(f"Configuration initialized at {config_file}")
+
+
+if __name__ == '__main__':
+    cli()

@@ -4,4 +4,22 @@ __version__ = "0.1.0"
 __author__ = "tomaz"
 __description__ = "KVM cloning utility"
 
-__all__ = ["__version__", "__author__", "__description__"]
+# Import main classes for easy access
+from .client import KVMCloneClient
+from .models import (
+    CloneOptions, SyncOptions, CloneResult, SyncResult,
+    VMInfo, ProgressInfo, OperationStatus
+)
+from .exceptions import (
+    KVMCloneError, ConfigurationError, ConnectionError,
+    VMNotFoundError, VMExistsError, TransferError
+)
+
+__all__ = [
+    "__version__", "__author__", "__description__",
+    "KVMCloneClient",
+    "CloneOptions", "SyncOptions", "CloneResult", "SyncResult",
+    "VMInfo", "ProgressInfo", "OperationStatus",
+    "KVMCloneError", "ConfigurationError", "ConnectionError",
+    "VMNotFoundError", "VMExistsError", "TransferError"
+]
