@@ -38,6 +38,13 @@ class OperationStatusEnum(Enum):
     CANCELLED = "cancelled"
 
 
+class TransferMethod(Enum):
+    """Transfer method for disk images."""
+
+    RSYNC = "rsync"  # Optimized rsync (default, most reliable)
+    LIBVIRT_STREAM = "libvirt"  # Native libvirt streaming (fastest)
+
+
 @dataclass
 class DiskInfo:
     """Disk information."""
@@ -91,6 +98,7 @@ class CloneOptions:
     network_config: Optional[Dict[str, Any]] = None
     bandwidth_limit: Optional[str] = None  # e.g., "100M", "1G"
     idempotent: bool = False  # Auto-cleanup existing VM on retry
+    transfer_method: TransferMethod = TransferMethod.RSYNC  # Default to optimized rsync
 
 
 @dataclass

@@ -16,6 +16,7 @@ import click
 import yaml
 
 from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
+from kvm_clone.models import TransferMethod
 from kvm_clone.exceptions import KVMCloneError, ConfigurationError
 from kvm_clone.config import config_loader
 
@@ -133,6 +134,13 @@ def cli(
     help="Custom network configuration file",
 )
 @click.option("--bandwidth-limit", "-b", help='Bandwidth limit (e.g., "100M", "1G")')
+@click.option(
+    "--transfer-method",
+    "-m",
+    type=click.Choice(["rsync", "libvirt"], case_sensitive=False),
+    default="rsync",
+    help="Transfer method: rsync (default, most reliable) or libvirt (fastest)",
+)
 @click.pass_context
 def clone(
     ctx: Any,
@@ -151,6 +159,7 @@ def clone(
     preserve_mac: bool,
     network_config: Optional[str],
     bandwidth_limit: Optional[str],
+    transfer_method: str,
 ) -> None:
     """Clone a virtual machine from source to destination host."""
 
@@ -168,6 +177,13 @@ def clone(
                 client_config["ssh_key_path"] = ssh_key
 
             async with KVMCloneClient(config=client_config, timeout=timeout) as client:
+                # Convert transfer method string to enum
+                transfer_method_enum = (
+                    TransferMethod.LIBVIRT_STREAM
+                    if transfer_method.lower() == "libvirt"
+                    else TransferMethod.RSYNC
+                )
+
                 clone_options = CloneOptions(
                     new_name=new_name,
                     force=force,
@@ -179,6 +195,7 @@ def clone(
                     preserve_mac=preserve_mac,
                     network_config=network_cfg,
                     bandwidth_limit=bandwidth_limit,
+                    transfer_method=transfer_method_enum,
                 )
 
                 if not ctx.obj["quiet"]:

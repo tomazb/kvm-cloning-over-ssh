@@ -209,7 +209,13 @@ class CommandBuilder:
         additional_options: Optional[List[str]] = None,
     ) -> str:
         """
-        Build a safe rsync command.
+        Build a safe rsync command optimized for VM disk transfers.
+
+        Optimization flags:
+        - -S (sparse): Only transfer used blocks, not holes (2-10x faster for VM disks)
+        - --partial: Resume interrupted transfers
+        - --inplace: Update files in-place (required for sparse + partial)
+        - No -z: Compression wastes CPU on modern networks, VM images don't compress well
 
         Args:
             source_path: Source file/directory path
@@ -221,7 +227,14 @@ class CommandBuilder:
         Returns:
             str: Safe rsync command
         """
-        cmd_parts = ["rsync", "-avz", "--progress"]
+        # Optimized flags for VM disk transfer:
+        # -a: archive mode (preserve permissions, timestamps, etc.)
+        # -v: verbose
+        # -S: sparse - handle sparse files efficiently (critical for VM disks!)
+        # --partial: keep partially transferred files for resume
+        # --inplace: update files in-place (required for sparse optimization)
+        # --progress: show transfer progress
+        cmd_parts = ["rsync", "-avS", "--partial", "--inplace", "--progress"]
 
         # Add bandwidth limit if specified
         if bandwidth_limit:
