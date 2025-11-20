@@ -23,6 +23,15 @@ poetry install
 # Clone a VM from one host to another
 kvm-clone clone source-host dest-host vm-name
 
+# Clone with custom name
+kvm-clone clone source-host dest-host vm-name --new-name my-vm
+
+# Idempotent clone (safe for automation/CI-CD)
+kvm-clone clone source-host dest-host vm-name --idempotent
+
+# Clone with bandwidth limit
+kvm-clone clone source-host dest-host vm-name --bandwidth-limit 100M
+
 # Synchronize an existing VM (incremental update)
 kvm-clone sync source-host dest-host vm-name
 
@@ -31,6 +40,34 @@ kvm-clone list host1 host2
 
 # Get help
 kvm-clone --help
+```
+
+### Advanced Usage Examples
+
+```bash
+# Safe retry in automation - automatically cleans up on conflict
+kvm-clone clone source dest vm --idempotent
+
+# If the operation fails or is interrupted, just retry
+# The --idempotent flag ensures clean state
+kvm-clone clone source dest vm --idempotent
+
+# Use in CI/CD pipelines with environment variables
+export KVM_CLONE_SSH_KEY_PATH=/path/to/key
+export KVM_CLONE_SSH_HOST_KEY_POLICY=auto_add  # For new hosts
+kvm-clone clone source dest vm --idempotent
+
+# Batch clone multiple VMs with safe retry
+for vm in $(virsh list --all --name); do
+  kvm-clone clone source dest "$vm" --idempotent || true
+done
+
+# Clone with all safety features
+kvm-clone clone source dest vm \
+  --idempotent \
+  --bandwidth-limit 500M \
+  --preserve-mac \
+  --timeout 7200
 ```
 
 ## 📋 Features
@@ -59,10 +96,37 @@ kvm-clone --help
 - **Configuration Validation** - Type-safe configuration loading and validation
 - **Resource Management** - Proper cleanup in error conditions
 
+### 🌐 Real-World Usability (Phase 3 - COMPLETED ✅)
+- **SSH Infrastructure Integration** - Full SSH config file support (~/.ssh/config)
+- **SSH Agent Support** - Automatic SSH agent authentication
+- **Connection Retry Logic** - Exponential backoff for transient failures (1s, 2s, 4s)
+- **Environment Variable Overrides** - Configure via env vars (KVM_CLONE_SSH_KEY_PATH, etc.)
+- **Enhanced Error Messages** - Actionable error messages with step-by-step remediation
+- **Bandwidth Limiting** - Control transfer speed with --bandwidth-limit flag
+- **Comprehensive Config CLI** - Full config management (init/get/set/unset/list/path)
+- **Username Auto-Detection** - Smart username resolution (SSH config > env > current user)
+
+### 🛡️ Data Safety & Robustness (Phase 4 - COMPLETED ✅)
+- **Disk Space Verification** - Pre-flight checks prevent out-of-space failures
+  - Queries storage pools for available space
+  - Calculates required space with 15% safety margin
+  - Fails fast with clear error messages before starting long operations
+- **Transactional Cloning** - Atomic operations with automatic rollback
+  - Staging directory for temporary files
+  - All-or-nothing commits (no partial clones on failure)
+  - Automatic cleanup of all resources on any error
+  - Transaction logs for debugging failures
+- **Idempotent Operations** - Safe retry without manual cleanup
+  - `--idempotent` flag for automation and CI/CD
+  - Auto-detect and cleanup existing VMs before retry
+  - Comprehensive audit logging of all actions
+  - Operations produce same result on retry
+
 ### 🚧 In Development
 - **Enhanced Test Coverage** - Expanding test suite to reach 90% coverage
-- **Performance Optimization** - Parallel transfers and bandwidth limiting
-- **Advanced Features** - Resume capability, compression, integrity verification
+- **Checksum Validation** - Data integrity verification after transfers
+- **Operation Timeouts** - Prevent indefinite hangs with configurable timeouts
+- **Advanced Features** - Resume capability, compression
 
 ## 🏗️ Architecture
 
@@ -72,9 +136,10 @@ The project follows a modular architecture:
 src/kvm_clone/
 ├── client.py          # Main client class (KVMCloneClient)
 ├── cloner.py          # VM cloning operations
-├── sync.py            # VM synchronization operations  
+├── sync.py            # VM synchronization operations
 ├── transport.py       # SSH transport layer
 ├── libvirt_wrapper.py # Libvirt API wrapper
+├── transaction.py     # Transaction management for atomic operations
 ├── models.py          # Data models and structures
 ├── exceptions.py      # Custom exceptions
 ├── security.py        # Security utilities and validation
@@ -86,10 +151,18 @@ src/kvm_clone/
 ## 📖 Documentation
 
 - **[API Specification](api_spec.md)** - Complete API documentation
+- **[TODO](TODO.md)** - Current status and roadmap
+
+### Implementation Guides
+- **[Phase 4: Data Safety & Robustness](docs/PHASE4_DATA_SAFETY.md)** - Critical safety features guide
+- **[Phase 3: Real-World Improvements](docs/REAL_WORLD_IMPROVEMENTS.md)** - Usability enhancements
+- **[Idempotency Analysis](docs/IDEMPOTENCY_ANALYSIS.md)** - Idempotent operations design
+
+### Project Documentation
 - **[Technical Specification](docs/technical_spec.md)** - Architecture and design details
 - **[Security Report](docs/SECURITY_FIXES_REPORT.md)** - Security fixes and improvements
-- **[TODO](TODO.md)** - Current status and roadmap
-- **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
+- **[Contributing](docs/CONTRIBUTING.md)** - How to contribute to the project
+- **[Changelog](docs/CHANGELOG.md)** - Version history and changes
 
 ## 🔧 Development
 
