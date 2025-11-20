@@ -75,6 +75,12 @@
   - [ ] Validate all disk images are accessible
   - [ ] Verify VM configuration is readable and valid
 
+- [ ] **Destination VM Conflict Detection** - Handle existing VMs gracefully
+  - [ ] Check if VM with same name exists on destination
+  - [ ] Offer interactive options: skip, cleanup & retry, or abort
+  - [ ] Implement --idempotent flag for automatic handling in CI/CD
+  - [ ] Log which action was taken for audit trail
+
 #### Atomic Operations & Rollback
 - [ ] **Transactional Cloning** - Implement atomic clone operations
   - [ ] Create temporary staging area for clone
@@ -93,6 +99,12 @@
   - [ ] Snapshot destination VM if replacing (optional flag)
   - [ ] Automatic cleanup of safety snapshots after success
   - [ ] Retention policy for safety snapshots
+
+- [ ] **Idempotent Operation Mode** - Safe retry without manual intervention
+  - [ ] Add --idempotent flag to clone command
+  - [ ] Auto-detect existing VMs and cleanup before retry
+  - [ ] Make clone operations safely retryable for automation
+  - [ ] Document idempotent behavior in user guide
 
 #### Data Integrity & Verification
 - [ ] **Checksum Validation** - Comprehensive integrity checks
