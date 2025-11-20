@@ -147,9 +147,7 @@ class VMSynchronizer:
 
             warnings = []
             if len(source_vm_info.disks) != len(dest_vm_info.disks):
-                warnings.append(
-                    "Disk count mismatch - synchronized subset only."
-                )
+                warnings.append("Disk count mismatch - synchronized subset only.")
 
             return SyncResult(
                 operation_id=operation_id,

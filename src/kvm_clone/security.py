@@ -130,10 +130,13 @@ class SecurityValidator:
                 resolved_path = (base_path / path_obj).resolve()
                 # Use is_relative_to when available (Py >=3.9); fallback to commonpath
                 try:
-                    is_within = resolved_path.is_relative_to(base_path)  # type: ignore[attr-defined]
+                    is_within = resolved_path.is_relative_to(base_path)
                 except AttributeError:
                     from os.path import commonpath
-                    is_within = commonpath([str(base_path), str(resolved_path)]) == str(base_path)
+
+                    is_within = commonpath([str(base_path), str(resolved_path)]) == str(
+                        base_path
+                    )
                 if not is_within:
                     raise ValidationError(f"Path traversal detected: {path}")
                 return str(resolved_path)

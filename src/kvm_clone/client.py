@@ -137,7 +137,9 @@ class KVMCloneClient:
         self._operations[result.operation_id] = OperationStatus(
             operation_id=result.operation_id,
             operation_type=OperationType.CLONE,
-            status=OperationStatusEnum.COMPLETED if result.success else OperationStatusEnum.FAILED,
+            status=OperationStatusEnum.COMPLETED
+            if result.success
+            else OperationStatusEnum.FAILED,
             result=result,
             completed=datetime.now(),
         )
@@ -188,7 +190,9 @@ class KVMCloneClient:
         self._operations[result.operation_id] = OperationStatus(
             operation_id=result.operation_id,
             operation_type=OperationType.SYNC,
-            status=OperationStatusEnum.COMPLETED if result.success else OperationStatusEnum.FAILED,
+            status=OperationStatusEnum.COMPLETED
+            if result.success
+            else OperationStatusEnum.FAILED,
             result=result,
             completed=datetime.now(),
         )
