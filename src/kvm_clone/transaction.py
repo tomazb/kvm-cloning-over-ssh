@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any, Callable, Awaitable
-from pathlib import Path
 
 from .logging import logger
 from .transport import SSHConnection
@@ -355,20 +353,18 @@ class CloneTransaction:
 
     async def _undefine_vm(self, vm_name: str, host: str) -> None:
         """Undefine a VM on remote host."""
-        from .security import SecurityValidator, CommandBuilder
-
-        SecurityValidator.validate_vm_name(vm_name)
+        from .security import CommandBuilder
 
         async with self.transport.connect(host) as conn:
             # Try to stop VM first if running
             try:
-                cmd = f"virsh destroy {CommandBuilder._quote(vm_name)}"
+                cmd = CommandBuilder.virsh_destroy(vm_name)
                 await conn.execute_command(cmd)
             except Exception:
                 pass  # VM might not be running
 
             # Undefine VM (without removing storage, we handle that separately)
-            cmd = f"virsh undefine {CommandBuilder._quote(vm_name)}"
+            cmd = CommandBuilder.virsh_undefine(vm_name)
             await conn.execute_command(cmd)
             logger.debug(f"Undefined VM {vm_name} on {host}")
 

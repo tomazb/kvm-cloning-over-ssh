@@ -3,7 +3,7 @@ Tests for idempotent clone operations.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 
 from src.kvm_clone.models import CloneOptions
 
@@ -63,7 +63,7 @@ async def test_cleanup_vm_stops_running_vm(mock_libvirt, mock_transport):
 
     mock_conn.lookupByName = Mock(return_value=mock_domain)
 
-    with patch.object(wrapper, "connect_to_host", return_value=mock_conn):
+    with patch.object(wrapper, "connect_to_host", new=AsyncMock(return_value=mock_conn)):
         await wrapper.cleanup_vm(mock_transport.connect.return_value, "test_vm")
 
     # Verify VM was stopped
@@ -91,7 +91,7 @@ async def test_cleanup_vm_extracts_disk_paths(mock_libvirt, mock_transport):
     mock_ssh_conn = AsyncMock()
     mock_ssh_conn.execute_command = AsyncMock(return_value=("", "", 0))
 
-    with patch.object(wrapper, "connect_to_host", return_value=mock_conn):
+    with patch.object(wrapper, "connect_to_host", new=AsyncMock(return_value=mock_conn)):
         await wrapper.cleanup_vm(mock_ssh_conn, "test_vm")
 
     # Verify disk deletion command was executed
@@ -115,13 +115,13 @@ async def test_cleanup_vm_handles_nonexistent_vm(mock_libvirt, mock_transport):
 
     mock_ssh_conn = AsyncMock()
 
-    with patch.object(wrapper, "connect_to_host", return_value=mock_conn):
+    with patch.object(wrapper, "connect_to_host", new=AsyncMock(return_value=mock_conn)):
         # Should not raise, just return
         await wrapper.cleanup_vm(mock_ssh_conn, "nonexistent_vm")
 
 
 @pytest.mark.asyncio
-async def test_idempotent_mode_triggers_cleanup():
+async def test_idempotent_mode_triggers_cleanup(mock_transport, mock_libvirt):
     """Test that idempotent mode triggers VM cleanup."""
     from src.kvm_clone.cloner import VMCloner
     from src.kvm_clone.models import VMInfo, VMState, DiskInfo
@@ -159,7 +159,7 @@ async def test_idempotent_mode_triggers_cleanup():
 
 
 @pytest.mark.asyncio
-async def test_force_mode_triggers_cleanup():
+async def test_force_mode_triggers_cleanup(mock_transport, mock_libvirt):
     """Test that force mode triggers VM cleanup."""
     from src.kvm_clone.cloner import VMCloner
     from src.kvm_clone.models import VMInfo, VMState, DiskInfo
@@ -197,7 +197,7 @@ async def test_force_mode_triggers_cleanup():
 
 
 @pytest.mark.asyncio
-async def test_validation_accepts_existing_vm_with_idempotent():
+async def test_validation_accepts_existing_vm_with_idempotent(mock_transport, mock_libvirt):
     """Test that validation allows existing VM when idempotent flag is set."""
     from src.kvm_clone.cloner import VMCloner
     from src.kvm_clone.models import VMInfo, VMState
@@ -238,7 +238,7 @@ async def test_validation_accepts_existing_vm_with_idempotent():
 
 
 @pytest.mark.asyncio
-async def test_validation_rejects_existing_vm_without_flags():
+async def test_validation_rejects_existing_vm_without_flags(mock_transport, mock_libvirt):
     """Test that validation rejects existing VM without idempotent or force flags."""
     from src.kvm_clone.cloner import VMCloner
     from src.kvm_clone.models import VMInfo, VMState

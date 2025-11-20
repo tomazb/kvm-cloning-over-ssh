@@ -198,6 +198,7 @@ class VMCloner:
                             staging_path,
                             progress_callback,
                             operation_id,
+                            bandwidth_limit=clone_options.bandwidth_limit,
                         )
 
                         # Final destination path
@@ -409,6 +410,7 @@ class VMCloner:
         new_vm_name: str,
         progress_callback: Optional[Callable[[ProgressInfo], None]],
         operation_id: str,
+        bandwidth_limit: Optional[str] = None,
     ) -> str:
         """
         Transfer a disk image from source to destination.
@@ -418,6 +420,7 @@ class VMCloner:
             dest_host: Destination host
             source_path: Source disk image path
             new_vm_name: New VM name for destination path
+            bandwidth_limit: Bandwidth limit (e.g., "100M", "1G")
             progress_callback: Progress callback
             operation_id: Operation ID for progress tracking
 
@@ -449,6 +452,7 @@ class VMCloner:
                         source_path=source_path,
                         dest_path=dest_path,
                         dest_host=dest_host,
+                        bandwidth_limit=bandwidth_limit,
                     )
 
                 stdout, stderr, exit_code = await source_conn.execute_command(command)
@@ -473,6 +477,7 @@ class VMCloner:
         dest_path: str,
         progress_callback: Optional[Callable[[ProgressInfo], None]],
         operation_id: str,
+        bandwidth_limit: Optional[str] = None,
     ) -> None:
         """
         Transfer a disk image to a specific destination path.
@@ -484,6 +489,7 @@ class VMCloner:
             dest_path: Destination disk image path
             progress_callback: Progress callback
             operation_id: Operation ID for progress tracking
+            bandwidth_limit: Bandwidth limit (e.g., "100M", "1G")
         """
         try:
             # Validate inputs
@@ -505,6 +511,7 @@ class VMCloner:
                         source_path=source_path,
                         dest_path=dest_path,
                         dest_host=dest_host,
+                        bandwidth_limit=bandwidth_limit,
                     )
 
                 stdout, stderr, exit_code = await source_conn.execute_command(command)

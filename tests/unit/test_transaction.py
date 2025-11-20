@@ -3,8 +3,7 @@ Tests for transaction management module.
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock
 from datetime import datetime
 
 from src.kvm_clone.transaction import (

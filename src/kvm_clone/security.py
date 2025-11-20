@@ -107,6 +107,26 @@ class SecurityValidator:
         return name
 
     @staticmethod
+    def validate_path(path: str, base_dir: Optional[str] = None) -> str:
+        """
+        Validate a filesystem path and optionally enforce a base directory.
+
+        This is a wrapper around sanitize_path for path validation.
+        Disallows empty/None paths and basic path traversal attempts.
+
+        Args:
+            path: File path to validate
+            base_dir: Optional base directory to restrict access to
+
+        Returns:
+            str: Validated path
+
+        Raises:
+            ValidationError: If path is invalid or attempts traversal
+        """
+        return SecurityValidator.sanitize_path(path, base_dir)
+
+    @staticmethod
     def sanitize_path(path: str, base_dir: Optional[str] = None) -> str:
         """
         Sanitize and validate file path to prevent path traversal attacks.
@@ -338,6 +358,34 @@ class CommandBuilder:
         # Validate path
         SecurityValidator.validate_path(path)
         return f"mkdir -p {shlex.quote(path)}"
+
+    @staticmethod
+    def virsh_destroy(vm_name: str) -> str:
+        """
+        Build command to destroy (stop) a VM.
+
+        Args:
+            vm_name: Name of VM to destroy
+
+        Returns:
+            str: Safe virsh destroy command
+        """
+        SecurityValidator.validate_vm_name(vm_name)
+        return f"virsh destroy {shlex.quote(vm_name)}"
+
+    @staticmethod
+    def virsh_undefine(vm_name: str) -> str:
+        """
+        Build command to undefine a VM.
+
+        Args:
+            vm_name: Name of VM to undefine
+
+        Returns:
+            str: Safe virsh undefine command
+        """
+        SecurityValidator.validate_vm_name(vm_name)
+        return f"virsh undefine {shlex.quote(vm_name)}"
 
 
 class SSHSecurity:

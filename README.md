@@ -54,7 +54,7 @@ kvm-clone clone source dest vm --idempotent
 
 # Use in CI/CD pipelines with environment variables
 export KVM_CLONE_SSH_KEY_PATH=/path/to/key
-export KVM_CLONE_SSH_HOST_KEY_POLICY=auto_add  # For new hosts
+export KVM_CLONE_SSH_HOST_KEY_POLICY=accept  # Auto-accept new hosts (testing only)
 kvm-clone clone source dest vm --idempotent
 
 # Batch clone multiple VMs with safe retry
