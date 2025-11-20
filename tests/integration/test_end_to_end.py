@@ -6,7 +6,7 @@ from tests.conftest import spec
 
 class TestFullCloneWorkflow:
     """Test complete clone workflow integration."""
-    
+
     @spec("INT-1")
     @pytest.mark.integration
     @pytest.mark.slow
@@ -20,14 +20,14 @@ class TestFullCloneWorkflow:
         # 4. Verifying clone success
         assert temp_clone_config["target_host"] == "remote-host"
         assert True  # Placeholder assertion
-    
+
     @spec("INT-2")
     @pytest.mark.integration
     def test_ssh_libvirt_integration(self):
         """Test SSH and libvirt integration."""
         # Placeholder test - would test SSH connection to libvirt
         assert True  # Placeholder assertion
-    
+
     @spec("INT-3")
     @pytest.mark.integration
     def test_error_recovery_workflow(self):
@@ -38,21 +38,21 @@ class TestFullCloneWorkflow:
 
 class TestNetworkCloning:
     """Test network-based cloning scenarios."""
-    
+
     @spec("NET-1")
     @pytest.mark.integration
     def test_clone_over_wan(self):
         """Test cloning over WAN connection."""
         # Placeholder test - would test WAN cloning
         assert True  # Placeholder assertion
-    
+
     @spec("NET-2")
     @pytest.mark.integration
     def test_clone_with_network_interruption(self):
         """Test clone behavior with network interruptions."""
         # Placeholder test - would test network interruption handling
         assert True  # Placeholder assertion
-    
+
     @spec("NET-3")
     @pytest.mark.integration
     def test_bandwidth_limited_clone(self):
@@ -63,7 +63,7 @@ class TestNetworkCloning:
 
 class TestMultiHostScenarios:
     """Test multi-host cloning scenarios."""
-    
+
     @spec("MULTI-1")
     @pytest.mark.integration
     @pytest.mark.slow
@@ -71,7 +71,7 @@ class TestMultiHostScenarios:
         """Test multiple simultaneous clone operations."""
         # Placeholder test - would test concurrent cloning
         assert True  # Placeholder assertion
-    
+
     @spec("MULTI-2")
     @pytest.mark.integration
     def test_clone_to_multiple_hosts(self):

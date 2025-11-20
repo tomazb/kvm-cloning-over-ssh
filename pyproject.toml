@@ -6,11 +6,17 @@ authors = ["tomaz"]
 readme = "README.md"
 packages = [{include = "kvm_clone", from = "src"}]
 
+[tool.poetry.scripts]
+kvm-clone = "kvm_clone.cli:cli"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 paramiko = "^3.5.1"
 libvirt-python = "^11.5.0"
 click = "^8.2.1"
+pyyaml = "^6.0.1"
+pydantic = "^2.0"
+pydantic-settings = "^2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
@@ -19,6 +25,28 @@ pytest-cov = "^6.0.0"
 mypy = "^1.17.0"
 types-paramiko = "^3.4.0"
 types-click = "^7.1.8"
+types-pyyaml = "^6.0.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=src/kvm_clone",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml",
+    "--cov-fail-under=30",
+    "--strict-markers",
+    "-v"
+]
+markers = [
+    "spec: marks tests as spec conformance tests with specification IDs",
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests",
+    "slow: marks tests as slow running"
+]
 
 [tool.mypy]
 python_version = "3.10"
@@ -33,6 +61,17 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
 strict_equality = true
+mypy_path = "src"
+packages = ["kvm_clone"]
+exclude = ["tests"]
+
+[[tool.mypy.overrides]]
+module = "libvirt"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytest"
+ignore_missing_imports = true
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

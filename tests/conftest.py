@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 # Custom marker for spec conformance tests
 def spec(spec_id: str):
     """Mark a test as conforming to a specific specification ID.
-    
+
     Args:
         spec_id: The specification ID (e.g., "FUNC-1", "REQ-2")
     """
@@ -26,7 +26,7 @@ def sample_vm_config():
         "memory": "2048M",
         "vcpus": 2,
         "disk_path": "/var/lib/libvirt/images/test-vm.qcow2",
-        "network": "default"
+        "network": "default",
     }
 
 
@@ -44,5 +44,5 @@ def temp_clone_config():
         "source_vm": "template-vm",
         "target_vm": "cloned-vm",
         "target_host": "remote-host",
-        "ssh_key": "/path/to/key"
+        "ssh_key": "/path/to/key",
     }
