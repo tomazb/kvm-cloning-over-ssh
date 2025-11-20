@@ -5,12 +5,16 @@ This module provides input validation, command sanitization, and path security
 functions to prevent common security vulnerabilities.
 """
 
+import os
 import re
 import shlex
 from pathlib import Path
 from typing import List, Optional, Any
 
+import paramiko
+
 from .exceptions import ValidationError
+from .logging import logger
 
 
 class SecurityValidator:
@@ -103,6 +107,26 @@ class SecurityValidator:
         return name
 
     @staticmethod
+    def validate_path(path: str, base_dir: Optional[str] = None) -> str:
+        """
+        Validate a filesystem path and optionally enforce a base directory.
+
+        This is a wrapper around sanitize_path for path validation.
+        Disallows empty/None paths and basic path traversal attempts.
+
+        Args:
+            path: File path to validate
+            base_dir: Optional base directory to restrict access to
+
+        Returns:
+            str: Validated path
+
+        Raises:
+            ValidationError: If path is invalid or attempts traversal
+        """
+        return SecurityValidator.sanitize_path(path, base_dir)
+
+    @staticmethod
     def sanitize_path(path: str, base_dir: Optional[str] = None) -> str:
         """
         Sanitize and validate file path to prevent path traversal attacks.
@@ -185,7 +209,13 @@ class CommandBuilder:
         additional_options: Optional[List[str]] = None,
     ) -> str:
         """
-        Build a safe rsync command.
+        Build a safe rsync command optimized for VM disk transfers.
+
+        Optimization flags:
+        - -S (sparse): Only transfer used blocks, not holes (2-10x faster for VM disks)
+        - --partial: Resume interrupted transfers
+        - --inplace: Update files in-place (required for sparse + partial)
+        - No -z: Compression wastes CPU on modern networks, VM images don't compress well
 
         Args:
             source_path: Source file/directory path
@@ -197,7 +227,14 @@ class CommandBuilder:
         Returns:
             str: Safe rsync command
         """
-        cmd_parts = ["rsync", "-avz", "--progress"]
+        # Optimized flags for VM disk transfer:
+        # -a: archive mode (preserve permissions, timestamps, etc.)
+        # -v: verbose
+        # -S: sparse - handle sparse files efficiently (critical for VM disks!)
+        # --partial: keep partially transferred files for resume
+        # --inplace: update files in-place (required for sparse optimization)
+        # --progress: show transfer progress
+        cmd_parts = ["rsync", "-avS", "--partial", "--inplace", "--progress"]
 
         # Add bandwidth limit if specified
         if bandwidth_limit:
@@ -225,6 +262,90 @@ class CommandBuilder:
             dest_target = shlex.quote(dest_path)
 
         cmd_parts.append(dest_target)
+
+        return " ".join(cmd_parts)
+
+    @staticmethod
+    def build_blocksync_command(
+        source_path: str,
+        dest_path: str,
+        dest_host: Optional[str] = None,
+        ssh_port: int = 22,
+        ssh_user: Optional[str] = None,
+        bandwidth_limit: Optional[str] = None,
+    ) -> str:
+        """
+        Build a safe blocksync-fast command for efficient block-level synchronization.
+
+        blocksync-fast (https://github.com/nethappen/blocksync-fast) is a tool for
+        efficiently synchronizing block devices over SSH by only transferring
+        differing blocks.
+
+        Performance characteristics:
+        - Best for: Incremental updates, large disk images with small changes
+        - Block-level diffing reduces transfer size significantly
+        - Can be 10-100x faster than rsync for incremental syncs
+        - First-time sync similar to rsync, but subsequent syncs much faster
+
+        Args:
+            source_path: Source file/device path
+            dest_path: Destination file/device path
+            dest_host: Destination host (for remote sync)
+            ssh_port: SSH port (default: 22)
+            ssh_user: SSH username (default: None, uses current user)
+            bandwidth_limit: Bandwidth limit in MB/s (e.g., "100")
+
+        Returns:
+            str: Safe blocksync command
+
+        Raises:
+            ValidationError: If parameters are invalid
+        """
+        # Validate paths
+        SecurityValidator.validate_path(source_path)
+        SecurityValidator.validate_path(dest_path)
+
+        # Basic command with source
+        cmd_parts = ["blocksync", shlex.quote(source_path)]
+
+        # Build destination target
+        if dest_host:
+            # Validate destination host
+            dest_host = SecurityValidator.validate_hostname(dest_host)
+
+            # Validate port
+            if not (1 <= ssh_port <= 65535):
+                raise ValidationError(f"Invalid SSH port: {ssh_port}")
+
+            # Build SSH target
+            if ssh_user:
+                ssh_user = SecurityValidator.validate_vm_name(ssh_user)  # Reuse validation
+                ssh_target = f"{ssh_user}@{dest_host}"
+            else:
+                ssh_target = dest_host
+
+            # Add SSH options
+            cmd_parts.extend(["-s", f"{shlex.quote(ssh_target)}:{shlex.quote(dest_path)}"])
+
+            # Add SSH port if non-standard
+            if ssh_port != 22:
+                cmd_parts.extend(["-p", str(ssh_port)])
+        else:
+            # Local sync
+            cmd_parts.append(shlex.quote(dest_path))
+
+        # Add bandwidth limit if specified
+        if bandwidth_limit:
+            # Validate bandwidth limit format (MB/s)
+            if not re.match(r"^\d+$", bandwidth_limit):
+                raise ValidationError(
+                    f"Invalid bandwidth limit format: {bandwidth_limit}. "
+                    "Should be a number in MB/s (e.g., '100')"
+                )
+            cmd_parts.extend(["--bwlimit", bandwidth_limit])
+
+        # Add verbose flag for progress monitoring
+        cmd_parts.append("-v")
 
         return " ".join(cmd_parts)
 
@@ -268,6 +389,101 @@ class CommandBuilder:
 
         return " ".join(cmd_parts)
 
+    @staticmethod
+    def _quote(value: str) -> str:
+        """Quote a string for shell safety."""
+        return shlex.quote(value)
+
+    @staticmethod
+    def rm_file(path: str) -> str:
+        """
+        Build command to remove a file.
+
+        Args:
+            path: File path to remove
+
+        Returns:
+            str: Safe rm command
+        """
+        # Validate path
+        SecurityValidator.validate_path(path)
+        return f"rm -f {shlex.quote(path)}"
+
+    @staticmethod
+    def rm_directory(path: str) -> str:
+        """
+        Build command to remove a directory.
+
+        Args:
+            path: Directory path to remove
+
+        Returns:
+            str: Safe rm command
+        """
+        # Validate path
+        SecurityValidator.validate_path(path)
+        return f"rm -rf {shlex.quote(path)}"
+
+    @staticmethod
+    def move_file(src: str, dst: str) -> str:
+        """
+        Build command to move a file.
+
+        Args:
+            src: Source path
+            dst: Destination path
+
+        Returns:
+            str: Safe mv command
+        """
+        # Validate paths
+        SecurityValidator.validate_path(src)
+        SecurityValidator.validate_path(dst)
+        return f"mv {shlex.quote(src)} {shlex.quote(dst)}"
+
+    @staticmethod
+    def mkdir(path: str) -> str:
+        """
+        Build command to create a directory.
+
+        Args:
+            path: Directory path to create
+
+        Returns:
+            str: Safe mkdir command
+        """
+        # Validate path
+        SecurityValidator.validate_path(path)
+        return f"mkdir -p {shlex.quote(path)}"
+
+    @staticmethod
+    def virsh_destroy(vm_name: str) -> str:
+        """
+        Build command to destroy (stop) a VM.
+
+        Args:
+            vm_name: Name of VM to destroy
+
+        Returns:
+            str: Safe virsh destroy command
+        """
+        SecurityValidator.validate_vm_name(vm_name)
+        return f"virsh destroy {shlex.quote(vm_name)}"
+
+    @staticmethod
+    def virsh_undefine(vm_name: str) -> str:
+        """
+        Build command to undefine a VM.
+
+        Args:
+            vm_name: Name of VM to undefine
+
+        Returns:
+            str: Safe virsh undefine command
+        """
+        SecurityValidator.validate_vm_name(vm_name)
+        return f"virsh undefine {shlex.quote(vm_name)}"
+
 
 class SSHSecurity:
     """SSH security utilities."""
@@ -275,17 +491,33 @@ class SSHSecurity:
     @staticmethod
     def get_known_hosts_policy() -> Any:
         """
-        Get a secure SSH host key policy.
+        Get SSH host key policy based on configuration.
+
+        Checks environment variable KVM_CLONE_SSH_HOST_KEY_POLICY:
+        - 'strict' (default): Reject unknown hosts (most secure)
+        - 'warn': Warn but accept unknown hosts
+        - 'accept': Auto-accept unknown hosts (least secure, not recommended)
 
         Returns:
-            paramiko.MissingHostKeyPolicy: Secure host key policy
+            paramiko.MissingHostKeyPolicy: Host key policy
         """
-        import paramiko
+        policy_name = os.getenv('KVM_CLONE_SSH_HOST_KEY_POLICY', 'strict').lower()
 
-        # Use RejectPolicy by default for security
-        # In production, you might want to implement a custom policy
-        # that checks against a known_hosts file
-        return paramiko.RejectPolicy()
+        if policy_name == 'accept':
+            logger.warning(
+                "Using AutoAddPolicy for SSH host keys. "
+                "This is insecure and should only be used for testing!"
+            )
+            return paramiko.AutoAddPolicy()
+        elif policy_name == 'warn':
+            logger.info(
+                "Using WarningPolicy for SSH host keys. "
+                "Unknown hosts will trigger a warning but connection will proceed."
+            )
+            return paramiko.WarningPolicy()
+        else:
+            # Default to strict (RejectPolicy)
+            return paramiko.RejectPolicy()
 
     @staticmethod
     def validate_ssh_key_path(key_path: str) -> str:

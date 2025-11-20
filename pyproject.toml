@@ -26,6 +26,10 @@ mypy = "^1.17.0"
 types-paramiko = "^3.4.0"
 types-click = "^7.1.8"
 types-pyyaml = "^6.0.12"
+flake8 = "^7.3.0"
+flake8-bugbear = "^25.10.21"
+flake8-import-order = "^0.19.2"
+flake8-comprehensions = "^3.17.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

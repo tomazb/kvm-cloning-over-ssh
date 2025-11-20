@@ -308,11 +308,50 @@ class LibvirtWrapper:
             total_memory = mem_stats.get("total", 0) // 1024  # Convert KB to MB
             free_memory = mem_stats.get("free", 0) // 1024
 
+            # Get storage pool information
+            total_disk = 0
+            available_disk = 0
+
+            try:
+                # List all storage pools (active and inactive)
+                pool_names = conn.listStoragePools() + conn.listDefinedStoragePools()
+
+                for pool_name in pool_names:
+                    try:
+                        pool = conn.storagePoolLookupByName(pool_name)
+
+                        # Refresh pool to get current state
+                        if pool.isActive():
+                            pool.refresh(0)
+
+                            # Get pool info
+                            info = pool.info()
+                            # info[1] = capacity in bytes
+                            # info[3] = available space in bytes
+                            total_disk += info[1]
+                            available_disk += info[3]
+
+                            logger.debug(
+                                f"Storage pool {pool_name}: "
+                                f"capacity={info[1]/1e9:.2f}GB, "
+                                f"available={info[3]/1e9:.2f}GB"
+                            )
+                    except libvirt.libvirtError as e:
+                        # Log but don't fail if a single pool is inaccessible
+                        logger.warning(
+                            f"Could not query storage pool {pool_name}: {e}",
+                            pool=pool_name
+                        )
+
+            except libvirt.libvirtError as e:
+                logger.warning(f"Could not list storage pools: {e}")
+                # Don't fail the entire operation, just return 0 for disk info
+
             return ResourceInfo(
                 total_memory=total_memory,
                 available_memory=free_memory,
-                total_disk=0,  # Would need additional calls to get disk info
-                available_disk=0,
+                total_disk=total_disk,
+                available_disk=available_disk,
                 cpu_count=node_info[2],
                 cpu_usage=0.0,  # Would need additional monitoring
             )
@@ -333,6 +372,75 @@ class LibvirtWrapper:
 
         except libvirt.libvirtError as e:
             raise LibvirtError(str(e), "vm_exists")
+
+    async def cleanup_vm(self, ssh_conn: SSHConnection, vm_name: str) -> None:
+        """
+        Clean up a VM by undefining it and removing all storage.
+
+        Args:
+            ssh_conn: SSH connection to the host
+            vm_name: Name of VM to clean up
+        """
+        from .security import SecurityValidator, CommandBuilder
+
+        try:
+            conn = await self.connect_to_host(ssh_conn)
+            SecurityValidator.validate_vm_name(vm_name)
+
+            # Get VM
+            try:
+                domain = conn.lookupByName(vm_name)
+            except libvirt.libvirtError:
+                # VM doesn't exist, nothing to cleanup
+                logger.debug(f"VM {vm_name} not found, nothing to cleanup")
+                return
+
+            # Stop VM if running
+            if domain.isActive():
+                logger.info(f"Stopping VM {vm_name} for cleanup")
+                try:
+                    domain.destroy()  # Force stop
+                except libvirt.libvirtError as e:
+                    logger.warning(f"Failed to stop VM {vm_name}: {e}")
+
+            # Get disk paths before undefining
+            disk_paths = []
+            try:
+                xml_desc = domain.XMLDesc(0)
+                import xml.etree.ElementTree as ET
+
+                root = ET.fromstring(xml_desc)
+                for disk_elem in root.findall(".//disk[@type='file']"):
+                    source_elem = disk_elem.find("source")
+                    if source_elem is not None:
+                        disk_path = source_elem.get("file")
+                        if disk_path:
+                            disk_paths.append(disk_path)
+            except Exception as e:
+                logger.warning(f"Failed to extract disk paths from {vm_name}: {e}")
+
+            # Undefine VM
+            try:
+                domain.undefine()
+                logger.info(f"Undefined VM {vm_name}")
+            except libvirt.libvirtError as e:
+                logger.error(f"Failed to undefine VM {vm_name}: {e}")
+                raise LibvirtError(str(e), "cleanup_vm")
+
+            # Delete disk files
+            for disk_path in disk_paths:
+                try:
+                    SecurityValidator.validate_path(disk_path)
+                    cmd = CommandBuilder.rm_file(disk_path)
+                    await ssh_conn.execute_command(cmd)
+                    logger.info(f"Deleted disk file {disk_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete disk {disk_path}: {e}")
+
+            logger.info(f"Successfully cleaned up VM {vm_name}")
+
+        except libvirt.libvirtError as e:
+            raise LibvirtError(str(e), "cleanup_vm")
 
     def close_all_connections(self) -> None:
         """Close all libvirt connections."""

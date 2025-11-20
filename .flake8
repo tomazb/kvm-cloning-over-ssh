@@ -1,0 +1,14 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203,W503
+exclude = .git,__pycache__,.venv,build,dist,site,htmlcov
+# Treat project modules as application imports for import-order plugin
+application-import-names = kvm_clone,tests
+import-order-style = pep8
+# Per-file ignores for deliberate re-export or pytest fixtures
+per-file-ignores =
+    src/kvm_clone/__init__.py:F401,
+    tests/conftest.py:F401
+# Enable useful error code families explicitly (default select is fine, but documented here)
+# B (bugbear), C4 (comprehensions), E/W (pycodestyle), F (pyflakes), I (import-order)
+# If later adding complexity, consider adding a baseline "--exit-zero" run first.

@@ -7,6 +7,7 @@ This module provides the CLI interface as specified in the API documentation.
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Any
@@ -15,6 +16,7 @@ import click
 import yaml
 
 from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
+from kvm_clone.models import TransferMethod
 from kvm_clone.exceptions import KVMCloneError, ConfigurationError
 from kvm_clone.config import config_loader
 
@@ -110,6 +112,11 @@ def cli(
 @click.argument("vm_name")
 @click.option("--new-name", "-n", help="Name for cloned VM")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing VM")
+@click.option(
+    "--idempotent",
+    is_flag=True,
+    help="Auto-cleanup existing VM and retry (safe for automation)",
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option(
     "--parallel", "-p", type=int, default=4, help="Number of parallel transfers"
@@ -126,6 +133,14 @@ def cli(
     type=click.Path(exists=True),
     help="Custom network configuration file",
 )
+@click.option("--bandwidth-limit", "-b", help='Bandwidth limit (e.g., "100M", "1G")')
+@click.option(
+    "--transfer-method",
+    "-m",
+    type=click.Choice(["rsync", "libvirt", "blocksync"], case_sensitive=False),
+    default="rsync",
+    help="Transfer method: rsync (default), libvirt (fastest), or blocksync (best for incremental)",
+)
 @click.pass_context
 def clone(
     ctx: Any,
@@ -134,6 +149,7 @@ def clone(
     vm_name: str,
     new_name: Optional[str],
     force: bool,
+    idempotent: bool,
     dry_run: bool,
     parallel: int,
     compress: bool,
@@ -142,6 +158,8 @@ def clone(
     ssh_key: Optional[str],
     preserve_mac: bool,
     network_config: Optional[str],
+    bandwidth_limit: Optional[str],
+    transfer_method: str,
 ) -> None:
     """Clone a virtual machine from source to destination host."""
 
@@ -159,15 +177,26 @@ def clone(
                 client_config["ssh_key_path"] = ssh_key
 
             async with KVMCloneClient(config=client_config, timeout=timeout) as client:
+                # Convert transfer method string to enum
+                if transfer_method.lower() == "libvirt":
+                    transfer_method_enum = TransferMethod.LIBVIRT_STREAM
+                elif transfer_method.lower() == "blocksync":
+                    transfer_method_enum = TransferMethod.BLOCKSYNC
+                else:
+                    transfer_method_enum = TransferMethod.RSYNC
+
                 clone_options = CloneOptions(
                     new_name=new_name,
                     force=force,
+                    idempotent=idempotent,
                     dry_run=dry_run,
                     parallel=parallel,
                     compress=compress,
                     verify=verify,
                     preserve_mac=preserve_mac,
                     network_config=network_cfg,
+                    bandwidth_limit=bandwidth_limit,
+                    transfer_method=transfer_method_enum,
                 )
 
                 if not ctx.obj["quiet"]:
@@ -388,7 +417,7 @@ def config_show(ctx: Any) -> None:
 
 
 @config.command("init")
-@click.option("--config-dir", default="~/.kvm-clone", help="Configuration directory")
+@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
 def config_init(config_dir: str) -> None:
     """Initialize default configuration."""
     config_path = Path(config_dir).expanduser()
@@ -398,7 +427,8 @@ def config_init(config_dir: str) -> None:
 
     # Generate config that matches AppConfig schema
     default_config = {
-        "ssh_key_path": "~/.ssh/id_rsa",
+        "ssh_key_path": None,
+        "ssh_port": 22,
         "default_timeout": 30,
         "log_level": "INFO",
         "known_hosts_file": None,
@@ -410,6 +440,163 @@ def config_init(config_dir: str) -> None:
         yaml.dump(default_config, f, default_flow_style=False)
 
     click.echo(f"Configuration initialized at {config_file}")
+
+
+def _load_config_file(config_dir: str) -> tuple[Path, dict]:
+    """
+    Helper to load configuration file.
+    
+    Returns:
+        Tuple of (config_path, config_data)
+    
+    Raises:
+        SystemExit if config file doesn't exist
+    """
+    config_path = Path(config_dir).expanduser() / "config.yaml"
+
+    if not config_path.exists():
+        click.echo(f"Configuration file not found at {config_path}", err=True)
+        click.echo("Run 'kvm-clone config init' to create one.", err=True)
+        sys.exit(1)
+
+    try:
+        with open(config_path, "r") as f:
+            config_data = yaml.safe_load(f) or {}
+        return config_path, config_data
+    except Exception as e:
+        click.echo(f"Error reading configuration: {e}", err=True)
+        sys.exit(1)
+
+
+@config.command("get")
+@click.argument("key")
+@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
+def config_get(key: str, config_dir: str) -> None:
+    """Get a configuration value."""
+    config_path, config_data = _load_config_file(config_dir)
+
+    if key in config_data:
+        click.echo(f"{key}: {config_data[key]}")
+    else:
+        click.echo(f"Key '{key}' not found in configuration", err=True)
+        sys.exit(1)
+
+
+@config.command("set")
+@click.argument("key")
+@click.argument("value")
+@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
+def config_set(key: str, value: str, config_dir: str) -> None:
+    """Set a configuration value."""
+    config_path = Path(config_dir).expanduser() / "config.yaml"
+
+    # Load existing config or create empty dict
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            config_data = yaml.safe_load(f) or {}
+    else:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_data = {}
+
+    # Convert value to appropriate type
+    l_value = value.lower()
+    if l_value in ("null", "none"):
+        config_data[key] = None
+    elif l_value == "true":
+        config_data[key] = True
+    elif l_value == "false":
+        config_data[key] = False
+    else:
+        # Try int, then float, then keep as string
+        try:
+            config_data[key] = int(value)
+        except ValueError:
+            try:
+                config_data[key] = float(value)
+            except ValueError:
+                config_data[key] = value
+
+    # Save config
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(config_data, f, default_flow_style=False)
+        click.echo(f"✓ Set {key} = {config_data[key]}")
+    except Exception as e:
+        click.echo(f"Error saving configuration: {e}", err=True)
+        sys.exit(1)
+
+
+@config.command("unset")
+@click.argument("key")
+@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
+@click.option("--ignore-missing", is_flag=True, help="Don't error if key doesn't exist (idempotent)")
+def config_unset(key: str, config_dir: str, ignore_missing: bool) -> None:
+    """Remove a configuration value."""
+    config_path = Path(config_dir).expanduser() / "config.yaml"
+
+    if not config_path.exists():
+        if ignore_missing:
+            click.echo(f"✓ Key {key} already absent (no config file)")
+            return
+        click.echo(f"Configuration file not found at {config_path}", err=True)
+        sys.exit(1)
+
+    try:
+        with open(config_path, "r") as f:
+            config_data = yaml.safe_load(f) or {}
+
+        if key in config_data:
+            del config_data[key]
+            with open(config_path, "w") as f:
+                yaml.dump(config_data, f, default_flow_style=False)
+            click.echo(f"✓ Removed {key}")
+        else:
+            if ignore_missing:
+                click.echo(f"✓ Key {key} already absent")
+            else:
+                click.echo(f"Key '{key}' not found in configuration", err=True)
+                sys.exit(1)
+
+    except Exception as e:
+        click.echo(f"Error updating configuration: {e}", err=True)
+        sys.exit(1)
+
+
+@config.command("list")
+@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
+def config_list(config_dir: str) -> None:
+    """List all configuration values."""
+    config_path, config_data = _load_config_file(config_dir)
+
+    if config_data:
+        click.echo(f"Configuration from {config_path}:\n")
+        for key, value in sorted(config_data.items()):
+            click.echo(f"  {key}: {value}")
+    else:
+        click.echo("Configuration file is empty")
+
+
+@config.command("path")
+def config_path() -> None:
+    """Show the configuration file path being used."""
+    default_paths = [
+        os.path.expanduser("~/.config/kvm-clone/config.yaml"),
+        "/etc/kvm-clone/config.yaml",
+        "config.yaml",
+    ]
+
+    click.echo("Configuration search paths (in order):")
+    for i, path in enumerate(default_paths, 1):
+        exists = "✓" if os.path.exists(path) else "✗"
+        click.echo(f"  {i}. {exists} {path}")
+
+    # Find which one is actually being used
+    for path in default_paths:
+        if os.path.exists(path):
+            click.echo(f"\nCurrently using: {path}")
+            return
+
+    click.echo("\nNo configuration file found. Run 'kvm-clone config init' to create one.")
 
 
 if __name__ == "__main__":
