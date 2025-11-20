@@ -17,7 +17,9 @@ from .models import (
     VMInfo,
     ProgressInfo,
     OperationStatusEnum,
+    OperationType,
 )
+from datetime import datetime
 from .cloner import VMCloner
 from .sync import VMSynchronizer
 from .transport import SSHTransport
@@ -123,13 +125,23 @@ class KVMCloneClient:
             network_config=network_config,
         )
 
-        return await self.cloner.clone(
+        result = await self.cloner.clone(
             source_host=source_host,
             dest_host=dest_host,
             vm_name=vm_name,
             clone_options=clone_options,
             progress_callback=progress_callback,
         )
+
+        # Track operation status
+        self._operations[result.operation_id] = OperationStatus(
+            operation_id=result.operation_id,
+            operation_type=OperationType.CLONE,
+            status=OperationStatusEnum.COMPLETED if result.success else OperationStatusEnum.FAILED,
+            result=result,
+            completed=datetime.now(),
+        )
+        return result
 
     async def sync_vm(
         self,
@@ -166,13 +178,21 @@ class KVMCloneClient:
             bandwidth_limit=bandwidth_limit,
         )
 
-        return await self.synchronizer.sync(
+        result = await self.synchronizer.sync(
             source_host=source_host,
             dest_host=dest_host,
             vm_name=vm_name,
             sync_options=sync_options,
             progress_callback=progress_callback,
         )
+        self._operations[result.operation_id] = OperationStatus(
+            operation_id=result.operation_id,
+            operation_type=OperationType.SYNC,
+            status=OperationStatusEnum.COMPLETED if result.success else OperationStatusEnum.FAILED,
+            result=result,
+            completed=datetime.now(),
+        )
+        return result
 
     async def list_vms(
         self, hosts: List[str], *, status_filter: Optional[str] = None

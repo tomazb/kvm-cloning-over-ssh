@@ -419,19 +419,19 @@ class TestSSHSecurityPolicy:
 
     def test_validate_ssh_key_path_expands_tilde(self):
         """Test SSH key path validation expands tilde."""
-        # Mock expanduser and exists
-        with patch("pathlib.Path.expanduser") as mock_expand:
-            with patch("pathlib.Path.exists", return_value=True):
-                with patch("pathlib.Path.is_file", return_value=True):
-                    with patch("pathlib.Path.stat") as mock_stat:
-                        mock_stat.return_value.st_mode = 0o100600
-                        mock_expand.return_value = Path("/home/user/.ssh/id_rsa")
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write("dummy key")
+            temp_key = f.name
 
-                        # Should not raise
-                        try:
-                            SSHSecurity.validate_ssh_key_path("~/.ssh/id_rsa")
-                        except ValidationError:
-                            pass  # File doesn't actually exist, but path expansion was tested
+        try:
+            os.chmod(temp_key, 0o600)
+            with patch("pathlib.Path.expanduser") as mock_expand:
+                mock_expand.return_value = Path(temp_key)
+                result = SSHSecurity.validate_ssh_key_path("~/.ssh/id_rsa")
+                mock_expand.assert_called_once()
+                assert result == temp_key
+        finally:
+            os.unlink(temp_key)
 
 
 class TestSecurityIntegration:

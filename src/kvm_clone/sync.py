@@ -94,6 +94,15 @@ class VMSynchronizer:
             transferred_bytes = 0
             blocks_synchronized = 0
 
+            # Warn if disk counts differ
+            if len(source_vm_info.disks) != len(dest_vm_info.disks):
+                logger.warning(
+                    "Source/destination disk count mismatch",
+                    source_disks=len(source_vm_info.disks),
+                    dest_disks=len(dest_vm_info.disks),
+                    operation_id=operation_id,
+                )
+
             for i, source_disk in enumerate(source_vm_info.disks):
                 if i < len(dest_vm_info.disks):
                     dest_disk = dest_vm_info.disks[i]
@@ -136,6 +145,12 @@ class VMSynchronizer:
                 duration=duration,
             )
 
+            warnings = []
+            if len(source_vm_info.disks) != len(dest_vm_info.disks):
+                warnings.append(
+                    "Disk count mismatch - synchronized subset only."
+                )
+
             return SyncResult(
                 operation_id=operation_id,
                 success=True,
@@ -145,6 +160,7 @@ class VMSynchronizer:
                 duration=duration,
                 bytes_transferred=transferred_bytes,
                 blocks_synchronized=blocks_synchronized,
+                warnings=warnings,
             )
 
         except Exception as e:

@@ -13,10 +13,7 @@ This project provides functionality to clone and synchronize KVM virtual machine
 git clone https://github.com/tomazb/kvm-cloning-over-ssh.git
 cd kvm-cloning-over-ssh
 
-# Install dependencies
-poetry install
-
-# Install the CLI tool
+# Install dependencies (includes CLI entry point)
 poetry install
 ```
 

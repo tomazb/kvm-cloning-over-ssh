@@ -127,9 +127,14 @@ class SecurityValidator:
         if base_dir:
             base_path = Path(base_dir).resolve()
             try:
-                # Resolve the path and check if it's within base_dir
                 resolved_path = (base_path / path_obj).resolve()
-                if not str(resolved_path).startswith(str(base_path)):
+                # Use is_relative_to when available (Py >=3.9); fallback to commonpath
+                try:
+                    is_within = resolved_path.is_relative_to(base_path)  # type: ignore[attr-defined]
+                except AttributeError:
+                    from os.path import commonpath
+                    is_within = commonpath([str(base_path), str(resolved_path)]) == str(base_path)
+                if not is_within:
                     raise ValidationError(f"Path traversal detected: {path}")
                 return str(resolved_path)
             except (OSError, ValueError) as e:

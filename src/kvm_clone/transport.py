@@ -122,7 +122,10 @@ class SSHConnection:
                 loop.run_in_executor(None, stderr.read), timeout=cmd_timeout
             )
 
-            exit_code = stdout.channel.recv_exit_status()
+            # Retrieve exit status without blocking event loop
+            exit_code = await loop.run_in_executor(
+                None, stdout.channel.recv_exit_status
+            )
 
             return (stdout_data.decode("utf-8"), stderr_data.decode("utf-8"), exit_code)
 

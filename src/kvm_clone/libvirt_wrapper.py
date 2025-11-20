@@ -3,6 +3,7 @@ Libvirt API wrapper for KVM operations.
 
 This module provides a high-level interface to libvirt for VM management operations.
 """
+from __future__ import annotations
 
 import random
 import uuid
@@ -84,6 +85,15 @@ class LibvirtWrapper:
                 domains = conn.listAllDomains(libvirt.VIR_CONNECT_LIST_DOMAINS_ACTIVE)
             elif status_filter == "stopped":
                 domains = conn.listAllDomains(libvirt.VIR_CONNECT_LIST_DOMAINS_INACTIVE)
+            elif status_filter == "paused":
+                try:
+                    domains = conn.listAllDomains(libvirt.VIR_CONNECT_LIST_DOMAINS_PAUSED)
+                except AttributeError:
+                    # Fallback: filter paused manually
+                    all_domains = conn.listAllDomains()
+                    domains = [
+                        d for d in all_domains if d.info()[0] == libvirt.VIR_DOMAIN_PAUSED
+                    ]
             else:
                 domains = conn.listAllDomains()
 
@@ -112,7 +122,7 @@ class LibvirtWrapper:
         except libvirt.libvirtError as e:
             raise LibvirtError(str(e), "get_vm_info")
 
-    async def _get_vm_info(self, domain: libvirt.virDomain, host: str) -> VMInfo:
+    async def _get_vm_info(self, domain: "libvirt.virDomain", host: str) -> VMInfo:
         """Extract VM information from libvirt domain."""
         try:
             # Get basic info
