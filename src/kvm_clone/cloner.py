@@ -5,7 +5,6 @@ This module handles the actual VM cloning process including disk image transfer
 and VM definition creation.
 """
 
-import asyncio
 import uuid
 from typing import Optional, Callable
 from datetime import datetime

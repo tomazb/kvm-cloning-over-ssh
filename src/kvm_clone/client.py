@@ -6,15 +6,12 @@ and synchronization operations over SSH connections.
 """
 
 import logging
-import asyncio
-from typing import Optional, Dict, Any, List, Callable, Union
-from pathlib import Path
+from typing import Optional, Dict, Any, List, Callable
 
 from .models import (
     CloneOptions, SyncOptions, CloneResult, SyncResult, 
     OperationStatus, VMInfo, ProgressInfo, OperationStatusEnum
 )
-from .exceptions import ConfigurationError, ConnectionError
 from .cloner import VMCloner
 from .sync import VMSynchronizer
 from .transport import SSHTransport

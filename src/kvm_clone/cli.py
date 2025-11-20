@@ -17,7 +17,6 @@ import yaml
 from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
 from kvm_clone.exceptions import KVMCloneError, ConfigurationError
 from kvm_clone.config import config_loader
-from kvm_clone.logging import logger
 
 
 # Configure logging
