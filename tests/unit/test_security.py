@@ -462,3 +462,98 @@ class TestSecurityIntegration:
         cmd = CommandBuilder.build_safe_command("cmd {arg}", arg="safe; dangerous")
         # Should be quoted
         assert "'" in cmd or "safe\\;" in cmd
+
+
+class TestCommandBuilderFileOperations:
+    """Test CommandBuilder file operation commands."""
+
+    def test_rm_file(self):
+        """Test building rm file command."""
+        cmd = CommandBuilder.rm_file("/tmp/test.txt")
+
+        assert "rm -f" in cmd
+        assert "/tmp/test.txt" in cmd
+        # Should be quoted
+        assert "'" in cmd or cmd.count("/tmp/test.txt") == 1
+
+    def test_rm_file_with_spaces(self):
+        """Test rm file with spaces in path."""
+        cmd = CommandBuilder.rm_file("/tmp/test file.txt")
+
+        assert "rm -f" in cmd
+        # Should be properly quoted
+        assert "'" in cmd or "\\" in cmd
+
+    def test_rm_file_path_traversal_rejected(self):
+        """Test path traversal in rm file is rejected."""
+        with pytest.raises(ValidationError):
+            CommandBuilder.rm_file("../../../../etc/passwd")
+
+    def test_rm_directory(self):
+        """Test building rm directory command."""
+        cmd = CommandBuilder.rm_directory("/tmp/testdir")
+
+        assert "rm -rf" in cmd
+        assert "/tmp/testdir" in cmd
+
+    def test_rm_directory_path_traversal_rejected(self):
+        """Test path traversal in rm directory is rejected."""
+        with pytest.raises(ValidationError):
+            CommandBuilder.rm_directory("../../../../etc")
+
+    def test_move_file(self):
+        """Test building move file command."""
+        cmd = CommandBuilder.move_file("/tmp/source.txt", "/tmp/dest.txt")
+
+        assert "mv" in cmd
+        assert "/tmp/source.txt" in cmd
+        assert "/tmp/dest.txt" in cmd
+
+    def test_move_file_with_spaces(self):
+        """Test move file with spaces in paths."""
+        cmd = CommandBuilder.move_file("/tmp/source file.txt", "/tmp/dest file.txt")
+
+        assert "mv" in cmd
+        # Should be properly quoted
+        assert "'" in cmd or "\\" in cmd
+
+    def test_move_file_path_traversal_rejected(self):
+        """Test path traversal in move file is rejected."""
+        with pytest.raises(ValidationError):
+            CommandBuilder.move_file("../../../../etc/passwd", "/tmp/bad")
+
+    def test_mkdir(self):
+        """Test building mkdir command."""
+        cmd = CommandBuilder.mkdir("/tmp/newdir")
+
+        assert "mkdir -p" in cmd
+        assert "/tmp/newdir" in cmd
+
+    def test_mkdir_with_spaces(self):
+        """Test mkdir with spaces in path."""
+        cmd = CommandBuilder.mkdir("/tmp/new directory")
+
+        assert "mkdir -p" in cmd
+        # Should be properly quoted
+        assert "'" in cmd or "\\" in cmd
+
+    def test_mkdir_path_traversal_rejected(self):
+        """Test path traversal in mkdir is rejected."""
+        with pytest.raises(ValidationError):
+            CommandBuilder.mkdir("../../../../tmp/bad")
+
+    def test_quote_method(self):
+        """Test _quote method."""
+        quoted = CommandBuilder._quote("test value")
+
+        # Should be properly quoted
+        assert "'" in quoted or "\\" in quoted
+        # Original value should be in there
+        assert "test" in quoted
+
+    def test_quote_with_injection_attempt(self):
+        """Test _quote prevents injection."""
+        quoted = CommandBuilder._quote("test; rm -rf /")
+
+        # Should be properly escaped
+        assert ";" not in quoted or "\\;" in quoted or "'" in quoted

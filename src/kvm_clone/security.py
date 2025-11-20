@@ -268,6 +268,73 @@ class CommandBuilder:
 
         return " ".join(cmd_parts)
 
+    @staticmethod
+    def _quote(value: str) -> str:
+        """Quote a string for shell safety."""
+        return shlex.quote(value)
+
+    @staticmethod
+    def rm_file(path: str) -> str:
+        """
+        Build command to remove a file.
+
+        Args:
+            path: File path to remove
+
+        Returns:
+            str: Safe rm command
+        """
+        # Validate path
+        SecurityValidator.validate_path(path)
+        return f"rm -f {shlex.quote(path)}"
+
+    @staticmethod
+    def rm_directory(path: str) -> str:
+        """
+        Build command to remove a directory.
+
+        Args:
+            path: Directory path to remove
+
+        Returns:
+            str: Safe rm command
+        """
+        # Validate path
+        SecurityValidator.validate_path(path)
+        return f"rm -rf {shlex.quote(path)}"
+
+    @staticmethod
+    def move_file(src: str, dst: str) -> str:
+        """
+        Build command to move a file.
+
+        Args:
+            src: Source path
+            dst: Destination path
+
+        Returns:
+            str: Safe mv command
+        """
+        # Validate paths
+        SecurityValidator.validate_path(src)
+        SecurityValidator.validate_path(dst)
+        return f"mv {shlex.quote(src)} {shlex.quote(dst)}"
+
+    @staticmethod
+    def mkdir(path: str) -> str:
+        """
+        Build command to create a directory.
+
+        Args:
+            path: Directory path to create
+
+        Returns:
+            str: Safe mkdir command
+        """
+        # Validate path
+        SecurityValidator.validate_path(path)
+        return f"mkdir -p {shlex.quote(path)}"
+
 
 class SSHSecurity:
     """SSH security utilities."""

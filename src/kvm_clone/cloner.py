@@ -23,6 +23,7 @@ from .exceptions import VMNotFoundError, TransferError, ValidationError, Libvirt
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
+from .transaction import CloneTransaction
 
 
 class VMCloner:
@@ -107,70 +108,104 @@ class VMCloner:
                     validation=validation,
                 )
 
-            # Get VM information from source
-            async with self.transport.connect(source_host) as source_conn:
-                try:
-                    vm_info = await self.libvirt.get_vm_info(source_conn, vm_name)
-                except LibvirtError as e:
-                    raise VMNotFoundError(vm_name, source_host) from e
+            # Use transaction for atomic operations
+            async with CloneTransaction(operation_id, self.transport) as txn:
+                # Get VM information from source
+                async with self.transport.connect(source_host) as source_conn:
+                    try:
+                        vm_info = await self.libvirt.get_vm_info(source_conn, vm_name)
+                    except LibvirtError as e:
+                        raise VMNotFoundError(vm_name, source_host) from e
 
-                # Clone VM definition
-                new_xml = await self.libvirt.clone_vm_definition(
-                    source_conn, vm_name, new_vm_name, clone_options.preserve_mac
-                )
-
-                # Transfer disk images and collect path mappings
-                total_bytes = 0
-                transferred_bytes = 0
-                disk_path_mappings = {}  # old_path -> new_path mapping
-
-                for disk in vm_info.disks:
-                    if progress_callback:
-                        progress_callback(
-                            ProgressInfo(
-                                operation_id=operation_id,
-                                operation_type=OperationType.CLONE,
-                                progress_percent=0.0,
-                                bytes_transferred=transferred_bytes,
-                                total_bytes=total_bytes,
-                                speed=0.0,
-                                eta=None,
-                                status=OperationStatusEnum.RUNNING,
-                                message=f"Transferring disk {disk.target}",
-                                current_file=disk.path,
-                            )
-                        )
-
-                    # Transfer disk image
-                    dest_path = await self._transfer_disk_image(
-                        source_host,
-                        dest_host,
-                        disk.path,
-                        new_vm_name,
-                        progress_callback,
-                        operation_id,
+                    # Clone VM definition
+                    new_xml = await self.libvirt.clone_vm_definition(
+                        source_conn, vm_name, new_vm_name, clone_options.preserve_mac
                     )
 
-                    # Store mapping for XML update
-                    disk_path_mappings[disk.path] = dest_path
-                    transferred_bytes += disk.size
+                    # Transfer disk images and collect path mappings
+                    total_bytes = 0
+                    transferred_bytes = 0
+                    disk_path_mappings = {}  # old_path -> new_path mapping
 
-                # Update XML with new disk paths using ElementTree
-                import xml.etree.ElementTree as ET
+                    # Create staging directory on destination
+                    async with self.transport.connect(dest_host) as dest_conn:
+                        staging_dir = txn.staging_dir
+                        mkdir_cmd = CommandBuilder.mkdir(staging_dir)
+                        await dest_conn.execute_command(mkdir_cmd)
+                        txn.register_directory(staging_dir, dest_host)
 
-                root = ET.fromstring(new_xml)
-                for disk_elem in root.findall(".//disk[@type='file']"):
-                    source_elem = disk_elem.find("source")
-                    if source_elem is not None:
-                        old_path = source_elem.get("file", "")
-                        if old_path in disk_path_mappings:
-                            source_elem.set("file", disk_path_mappings[old_path])
+                    for disk in vm_info.disks:
+                        if progress_callback:
+                            progress_callback(
+                                ProgressInfo(
+                                    operation_id=operation_id,
+                                    operation_type=OperationType.CLONE,
+                                    progress_percent=0.0,
+                                    bytes_transferred=transferred_bytes,
+                                    total_bytes=total_bytes,
+                                    speed=0.0,
+                                    eta=None,
+                                    status=OperationStatusEnum.RUNNING,
+                                    message=f"Transferring disk {disk.target}",
+                                    current_file=disk.path,
+                                )
+                            )
 
-                new_xml = ET.tostring(root, encoding="unicode")
+                        # Transfer to staging directory
+                        import os
 
-                # Create VM on destination
-                async with self.transport.connect(dest_host) as dest_conn:
-                    await self.libvirt.create_vm_from_xml(dest_conn, new_xml)
+                        disk_filename = os.path.basename(disk.path)
+                        staging_path = txn.get_staging_path(disk_filename)
+
+                        # Transfer disk image to staging
+                        await self._transfer_disk_image_to_path(
+                            source_host,
+                            dest_host,
+                            disk.path,
+                            staging_path,
+                            progress_callback,
+                            operation_id,
+                        )
+
+                        # Final destination path
+                        dest_path = f"/var/lib/libvirt/images/{new_vm_name}_{disk_filename}"
+
+                        # Register as temporary disk (will be moved on commit)
+                        txn.register_disk(
+                            staging_path, dest_host, is_temporary=True, final_path=dest_path
+                        )
+
+                        # Store mapping for XML update
+                        disk_path_mappings[disk.path] = dest_path
+                        transferred_bytes += disk.size
+
+                    # Update XML with new disk paths using ElementTree
+                    import xml.etree.ElementTree as ET
+
+                    root = ET.fromstring(new_xml)
+                    for disk_elem in root.findall(".//disk[@type='file']"):
+                        source_elem = disk_elem.find("source")
+                        if source_elem is not None:
+                            old_path = source_elem.get("file", "")
+                            if old_path in disk_path_mappings:
+                                source_elem.set("file", disk_path_mappings[old_path])
+
+                    new_xml = ET.tostring(root, encoding="unicode")
+
+                    # Create VM on destination
+                    async with self.transport.connect(dest_host) as dest_conn:
+                        await self.libvirt.create_vm_from_xml(dest_conn, new_xml)
+
+                    # Register VM for cleanup on failure
+                    txn.register_vm(new_vm_name, dest_host)
+
+                # Commit transaction (move files to final location)
+                await txn.commit()
+
+                logger.info(
+                    f"Transaction {operation_id} committed - clone successful",
+                    operation_id=operation_id,
+                )
 
             duration = (datetime.now() - start_time).total_seconds()
 
@@ -386,6 +421,60 @@ class VMCloner:
                     )
 
             return dest_path
+
+        except ValidationError as e:
+            raise TransferError(f"Validation error: {e}", source_host, dest_host)
+        except Exception as e:
+            raise TransferError(str(e), source_host, dest_host)
+
+    async def _transfer_disk_image_to_path(
+        self,
+        source_host: str,
+        dest_host: str,
+        source_path: str,
+        dest_path: str,
+        progress_callback: Optional[Callable[[ProgressInfo], None]],
+        operation_id: str,
+    ) -> None:
+        """
+        Transfer a disk image to a specific destination path.
+
+        Args:
+            source_host: Source host
+            dest_host: Destination host
+            source_path: Source disk image path
+            dest_path: Destination disk image path
+            progress_callback: Progress callback
+            operation_id: Operation ID for progress tracking
+        """
+        try:
+            # Validate inputs
+            source_host = SecurityValidator.validate_hostname(source_host)
+            dest_host = SecurityValidator.validate_hostname(dest_host)
+            SecurityValidator.validate_path(source_path)
+            SecurityValidator.validate_path(dest_path)
+
+            # Build secure command
+            async with self.transport.connect(source_host) as source_conn:
+                if dest_host == source_host:
+                    # Local copy using secure command building
+                    command = CommandBuilder.build_safe_command(
+                        "cp {source} {dest}", source=source_path, dest=dest_path
+                    )
+                else:
+                    # Remote copy using secure rsync command
+                    command = CommandBuilder.build_rsync_command(
+                        source_path=source_path,
+                        dest_path=dest_path,
+                        dest_host=dest_host,
+                    )
+
+                stdout, stderr, exit_code = await source_conn.execute_command(command)
+
+                if exit_code != 0:
+                    raise TransferError(
+                        f"Transfer failed: {stderr}", source_host, dest_host
+                    )
 
         except ValidationError as e:
             raise TransferError(f"Validation error: {e}", source_host, dest_host)
