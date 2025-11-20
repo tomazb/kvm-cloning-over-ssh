@@ -275,17 +275,38 @@ class SSHSecurity:
     @staticmethod
     def get_known_hosts_policy() -> Any:
         """
-        Get a secure SSH host key policy.
+        Get SSH host key policy based on configuration.
+
+        Checks environment variable KVM_CLONE_SSH_HOST_KEY_POLICY:
+        - 'strict' (default): Reject unknown hosts (most secure)
+        - 'warn': Warn but accept unknown hosts
+        - 'accept': Auto-accept unknown hosts (least secure, not recommended)
 
         Returns:
-            paramiko.MissingHostKeyPolicy: Secure host key policy
+            paramiko.MissingHostKeyPolicy: Host key policy
         """
         import paramiko
+        import os
 
-        # Use RejectPolicy by default for security
-        # In production, you might want to implement a custom policy
-        # that checks against a known_hosts file
-        return paramiko.RejectPolicy()
+        policy_name = os.getenv('KVM_CLONE_SSH_HOST_KEY_POLICY', 'strict').lower()
+
+        if policy_name == 'accept':
+            from .logging import logger
+            logger.warning(
+                "Using AutoAddPolicy for SSH host keys. "
+                "This is insecure and should only be used for testing!"
+            )
+            return paramiko.AutoAddPolicy()
+        elif policy_name == 'warn':
+            from .logging import logger
+            logger.info(
+                "Using WarningPolicy for SSH host keys. "
+                "Unknown hosts will trigger a warning but connection will proceed."
+            )
+            return paramiko.WarningPolicy()
+        else:
+            # Default to strict (RejectPolicy)
+            return paramiko.RejectPolicy()
 
     @staticmethod
     def validate_ssh_key_path(key_path: str) -> str:

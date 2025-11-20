@@ -89,6 +89,7 @@ class CloneOptions:
     verify: bool = True
     preserve_mac: bool = False
     network_config: Optional[Dict[str, Any]] = None
+    bandwidth_limit: Optional[str] = None  # e.g., "100M", "1G"
 
 
 @dataclass
