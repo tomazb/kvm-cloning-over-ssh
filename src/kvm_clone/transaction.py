@@ -57,9 +57,13 @@ class TransactionLog:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = asdict(self)
-        # Remove cleanup_func as it can't be serialized
+        # Remove cleanup_func as it can't be serialized and normalize enums
         for resource in result.get("resources", []):
             resource.pop("cleanup_func", None)
+            # Convert ResourceType enum to string value
+            rt = resource.get("resource_type")
+            if isinstance(rt, Enum):
+                resource["resource_type"] = rt.value
         return result
 
     def save_to_file(self, path: str) -> None:

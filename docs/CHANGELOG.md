@@ -7,7 +7,233 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - 2025-11-20
+## [0.5.0] - 2025-11-20 - Real-World Usability & Data Safety
+
+### Added - SSH Infrastructure Integration
+
+- **SSH Agent Support**:
+  - Automatic SSH agent detection and key management
+  - `allow_agent=True` in connection parameters
+  - Falls back gracefully when agent not available
+  - Works seamlessly with ssh-add loaded keys
+
+- **SSH Config Integration**:
+  - Reads and respects `~/.ssh/config` for all connection parameters
+  - Supports host aliases (Host directive)
+  - Reads hostname, port, user, and IdentityFile directives
+  - Proper precedence: CLI args > SSH config > defaults
+  - Loads system known_hosts files automatically
+
+- **Username Auto-Detection**:
+  - Priority order: CLI arg > SSH config > environment > current user
+  - Reads from `USER` or `USERNAME` environment variables
+  - Falls back to `getpass.getuser()` as last resort
+  - Clear logging of detected username
+
+### Added - Connection Resilience
+
+- **Automatic Retry Logic**:
+  - Configurable retry attempts (default: 3)
+  - Exponential backoff: 1s, 2s, 4s between retries
+  - Retries network errors and transient failures
+  - Skips retry for authentication errors (won't succeed)
+  - Clear logging of retry attempts and progress
+  - `max_retries` parameter in SSHTransport and SSHConnection
+
+- **Intelligent Error Classification**:
+  - Distinguishes transient vs permanent failures
+  - Separate handling for auth, hostkey, network, and SSH errors
+  - Retry only errors that might succeed on subsequent attempts
+
+### Added - Enhanced Error Messages
+
+- **Actionable Authentication Errors**:
+  - Step-by-step remediation instructions
+  - Tailored suggestions based on configuration
+  - SSH key troubleshooting (permissions, ssh-copy-id)
+  - SSH agent troubleshooting (ssh-add commands)
+  - Manual connection testing commands
+
+- **Host Key Verification Errors**:
+  - Clear explanation of the security feature
+  - Multiple resolution options (manual ssh, SSH config, env var)
+  - Warnings about insecure workarounds
+  - Specific instructions for each approach
+
+- **Network Error Guidance**:
+  - Connectivity troubleshooting hints
+  - Port and hostname verification steps
+  - Context-aware error messages
+
+### Added - Flexible Security Configuration
+
+- **Configurable Host Key Policy**:
+  - `KVM_CLONE_SSH_HOST_KEY_POLICY` environment variable
+  - Three modes:
+    - `strict` (default): RejectPolicy - most secure
+    - `warn`: WarningPolicy - warn but proceed
+    - `accept`: AutoAddPolicy - auto-accept (testing only)
+  - Clear warnings for insecure modes
+  - Secure by default philosophy
+
+### Added - Environment Variable Configuration
+
+- **Full Environment Variable Support**:
+  - `KVM_CLONE_SSH_KEY_PATH`: SSH private key path
+  - `KVM_CLONE_SSH_PORT`: Default SSH port
+  - `KVM_CLONE_TIMEOUT`: Connection timeout
+  - `KVM_CLONE_LOG_LEVEL`: Logging level
+  - `KVM_CLONE_KNOWN_HOSTS_FILE`: Known hosts file path
+  - `KVM_CLONE_PARALLEL_TRANSFERS`: Parallel transfer count
+  - `KVM_CLONE_BANDWIDTH_LIMIT`: Bandwidth limit
+  - `KVM_CLONE_SSH_HOST_KEY_POLICY`: Host key policy
+
+- **Configuration Priority**:
+  - Environment variables (highest priority)
+  - Config file (explicit path or defaults)
+  - Built-in defaults (lowest priority)
+  - Clear documentation of all variables
+
+### Added - Bandwidth Management
+
+- **Clone Command Bandwidth Limiting**:
+  - `--bandwidth-limit` option added to clone command
+  - Previously only available for sync operations
+  - Prevents network saturation during production clones
+  - Supports M/G suffixes (e.g., "100M", "1G")
+  - Wired through entire clone pipeline
+
+### Added - Configuration Management CLI
+
+- **Six New Config Commands**:
+  - `kvm-clone config init`: Initialize default configuration
+  - `kvm-clone config list`: List all configuration values
+  - `kvm-clone config get <key>`: Get specific value
+  - `kvm-clone config set <key> <value>`: Set configuration value
+  - `kvm-clone config unset <key>`: Remove configuration value
+  - `kvm-clone config path`: Show configuration file locations
+
+- **Smart Type Conversion**:
+  - Automatic int/float/bool/null detection
+  - Handles "true", "false", "null", "none"
+  - Tries int, then float, then keeps as string
+  - No manual YAML editing required
+
+- **Idempotent Config Operations**:
+  - `--ignore-missing` flag for unset command
+  - Safe for automation and scripts
+  - Exit code 0 even when key doesn't exist
+
+### Added - Data Safety & Robustness
+
+- **Transactional Cloning**:
+  - `CloneTransaction` class for atomic operations
+  - Staging directory for temporary files
+  - Resource registry tracks all created resources
+  - Commit handler moves files to final location
+  - Rollback handler cleans up on failure
+  - Transaction logging to JSON files
+
+- **Resource Types**:
+  - `DISK_FILE`: Final disk images
+  - `TEMP_DISK_FILE`: Staging area disks
+  - `VM_DEFINITION`: Libvirt VM definitions
+  - `NETWORK_INTERFACE`: Network configurations
+  - `DIRECTORY`: Created directories
+
+- **Rollback Mechanism**:
+  - Automatic rollback on any exception
+  - Cleanup in reverse order of creation
+  - Custom cleanup functions supported
+  - Comprehensive error logging
+  - Zero manual cleanup required
+
+- **Disk Space Verification**:
+  - Pre-flight check for available space
+  - Calculates total VM disk size
+  - Checks destination host free space
+  - Ensures 10-20% safety margin
+  - Fails early with clear error messages
+
+- **Resource Availability Checks**:
+  - CPU availability validation
+  - Memory availability validation
+  - Storage pool accessibility verification
+  - Pre-validates destination host resources
+
+- **Destination VM Conflict Detection**:
+  - Checks if VM with same name exists
+  - Automatic cleanup on conflict (with flags)
+  - `--idempotent` flag for automatic handling
+  - Audit trail of cleanup actions
+
+### Added - Idempotent Operations
+
+- **Idempotent Clone Mode**:
+  - `--idempotent` flag for clone command
+  - Auto-detects existing VMs
+  - Automatic cleanup before retry
+  - Safe for CI/CD and automation
+  - No manual intervention required
+
+- **VM Cleanup Implementation**:
+  - `LibvirtWrapper.cleanup_vm()` method
+  - Stops running VMs gracefully
+  - Extracts disk paths from XML
+  - Undefines VM from libvirt
+  - Deletes all disk files
+  - Comprehensive error handling
+
+### Added - Command Builder Utilities
+
+- **File Operation Commands**:
+  - `CommandBuilder.rm_file()`: Safe file deletion
+  - `CommandBuilder.rm_directory()`: Safe directory deletion
+  - `CommandBuilder.move_file()`: Safe file moving
+  - `CommandBuilder.mkdir()`: Safe directory creation
+  - `CommandBuilder.virsh_destroy()`: Safe VM stop
+  - `CommandBuilder.virsh_undefine()`: Safe VM undefine
+
+- **Path Validation**:
+  - `SecurityValidator.validate_path()`: Path validation
+  - Path traversal prevention
+  - Integration with sanitize_path
+  - Consistent security across all commands
+
+### Improved
+
+- **Configuration Loading**:
+  - Environment variable override support
+  - Better error messages for invalid configs
+  - Type validation and conversion
+  - Comprehensive docstrings
+
+- **SSH Connection Handling**:
+  - Better error context and messages
+  - Hostname resolution from SSH config
+  - Port resolution from SSH config
+  - Identity file resolution
+  - Multiple fallback mechanisms
+
+- **Progress Tracking**:
+  - Better operation ID tracking
+  - Attempt counter in logs
+  - Clear success/failure indication
+
+### Fixed
+
+- **TransactionLog JSON Serialization**: Fixed enum serialization in `to_dict()` method
+- **Test Validation**: Fixed idempotent validation test to properly test both VMs existing
+- **Markdown Linting**: Added language tags to all fenced code blocks in documentation
+
+### Documentation
+
+- **REAL_WORLD_IMPROVEMENTS.md**: Comprehensive guide to all usability improvements
+- **IDEMPOTENCY_ANALYSIS.md**: Analysis and implementation of idempotent operations  
+- **PHASE4_DATA_SAFETY.md**: Data safety features and robustness improvements
+- **Updated README.md**: New features, environment variables, and usage examples
+
+## [0.4.0] - 2025-11-20 - Transfer Method Optimization
 
 ### Added - Transfer Method Optimization
 

@@ -205,16 +205,8 @@ async def test_validation_accepts_existing_vm_with_idempotent(mock_transport, mo
 
     cloner = VMCloner(mock_transport, mock_libvirt)
 
-    # Setup: VM exists on destination
-    async def vm_exists_side_effect(conn, name):
-        # First call checks source (doesn't exist), second checks dest (exists)
-        if vm_exists_side_effect.call_count == 0:
-            vm_exists_side_effect.call_count += 1
-            return False
-        return True
-
-    vm_exists_side_effect.call_count = 0
-    mock_libvirt.vm_exists = AsyncMock(side_effect=vm_exists_side_effect)
+    # Setup: Both source and destination VMs exist
+    mock_libvirt.vm_exists = AsyncMock(return_value=True)
     mock_libvirt.get_vm_info.return_value = VMInfo(
         name="test_vm",
         uuid="123",
@@ -230,11 +222,13 @@ async def test_validation_accepts_existing_vm_with_idempotent(mock_transport, mo
 
     options = CloneOptions(idempotent=True)
 
-    # Validation should pass (with warning, not error)
+    # Validation should pass with warning
     result = await cloner.validate_prerequisites("source", "dest", "test_vm", options)
 
-    # Should be valid (warnings allowed, not errors)
-    assert result.valid or any("idempotent mode" in w for w in result.warnings)
+    # Should be valid with idempotent warning
+    assert result.valid is True
+    assert len(result.errors) == 0
+    assert any("idempotent mode" in w.lower() for w in result.warnings)
 
 
 @pytest.mark.asyncio

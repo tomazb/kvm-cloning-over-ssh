@@ -74,7 +74,7 @@ kvm-clone clone production dest-host vm-name
 - Clear logging of retry attempts
 
 **Log Example**:
-```
+```text
 WARNING: Connection refused to host.example.com, retrying in 1s (attempt 1/3)
 WARNING: Network error connecting to host.example.com: timeout, retrying in 2s (attempt 2/3)
 INFO: SSH connection established to host.example.com:22 as myuser (attempt 3/3)
@@ -90,7 +90,7 @@ INFO: SSH connection established to host.example.com:22 as myuser (attempt 3/3)
 Comprehensive, context-aware error messages with step-by-step remediation:
 
 #### Authentication Errors
-```
+```text
 Authentication failed for user@hostname
 
 Possible solutions:
@@ -110,7 +110,8 @@ Possible solutions:
 ```
 
 #### Host Key Verification Errors
-```
+
+```text
 Host key verification failed for hostname.
 
 Possible solutions:
@@ -126,7 +127,8 @@ Possible solutions:
 ```
 
 #### Network Errors
-```
+
+```text
 Network error connecting to hostname:22: Connection timeout
 Please check network connectivity and hostname.
 ```

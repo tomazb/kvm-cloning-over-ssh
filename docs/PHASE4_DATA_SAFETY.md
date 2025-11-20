@@ -63,7 +63,7 @@ if resources.available_disk < required_space:
 
 ### Error Message Example
 
-```
+```text
 Error: Insufficient disk space on dest-host.
 Required: 52.50 GB (including 15% safety margin),
 Available: 45.23 GB
@@ -91,7 +91,7 @@ All-or-nothing atomic operations using a transaction framework with automatic ro
 
 ### Architecture
 
-```
+```text
 CloneTransaction
 ├── Staging Directory (/tmp/kvm-clone-{operation-id}/)
 ├── Resource Registry (tracks all created resources)
@@ -274,7 +274,7 @@ done
 
 ### Log Example
 
-```
+```text
 INFO: Idempotent mode: Cleaning up existing VM 'test_vm' on dest-host
 INFO: Stopping VM test_vm for cleanup
 INFO: Undefined VM test_vm
@@ -317,7 +317,8 @@ All three features have comprehensive test coverage:
 ## 📊 Impact
 
 ### Before Phase 4
-```
+
+```text
 Clone Operation Failure Rate: ~30%
 - Out of disk space: 40%
 - Partial clones: 35%
@@ -328,7 +329,8 @@ Time to recover from failure: 10-30 minutes
 ```
 
 ### After Phase 4
-```
+
+```text
 Clone Operation Failure Rate: <5%
 - Out of disk space: 0% (prevented)
 - Partial clones: 0% (transactional)
