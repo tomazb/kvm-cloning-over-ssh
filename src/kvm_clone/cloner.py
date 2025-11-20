@@ -13,8 +13,8 @@ from pathlib import Path
 from .logging import logger
 from .models import CloneOptions, CloneResult, ProgressInfo, ValidationResult, OperationType, OperationStatusEnum
 from .exceptions import (
-    KVMCloneError, VMNotFoundError, VMExistsError, TransferError, 
-    ValidationError, LibvirtError, SSHError
+    VMNotFoundError, TransferError, 
+    ValidationError, LibvirtError
 )
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
@@ -216,7 +216,7 @@ class VMCloner:
                 
                 # Check destination resources
                 try:
-                    resources = await self.libvirt.get_host_resources(dest_conn)
+                    _resources = await self.libvirt.get_host_resources(dest_conn)
                     # Add resource validation logic here
                 except Exception as e:
                     warnings.append(f"Could not check destination resources: {e}")

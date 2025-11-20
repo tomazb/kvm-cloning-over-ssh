@@ -7,7 +7,6 @@ This module handles loading and validating configuration from files and environm
 import os
 import yaml
 from typing import Optional
-from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from .exceptions import ConfigurationError

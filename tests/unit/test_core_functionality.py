@@ -1,13 +1,11 @@
 """Unit tests for core KVM cloning functionality."""
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime
 
 from kvm_clone.client import KVMCloneClient
-from kvm_clone.models import CloneOptions, VMInfo, VMState, DiskInfo, NetworkInfo
-from kvm_clone.exceptions import VMNotFoundError, ConfigurationError
+from kvm_clone.models import CloneOptions, VMInfo, VMState
 from tests.conftest import spec
 
 

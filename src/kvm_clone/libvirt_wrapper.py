@@ -4,7 +4,6 @@ Libvirt API wrapper for KVM operations.
 This module provides a high-level interface to libvirt for VM management operations.
 """
 
-import logging
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
@@ -292,7 +291,7 @@ class LibvirtWrapper:
         for uri, conn in self._connections.items():
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         self._connections.clear()
         logger.info("All libvirt connections closed")

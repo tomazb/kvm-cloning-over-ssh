@@ -5,7 +5,7 @@ This module handles SSH connections and secure data transfer between hosts.
 """
 
 import asyncio
-from typing import Optional, Dict, Any, AsyncContextManager, Callable, AsyncIterator
+from typing import Optional, Dict, Callable, AsyncIterator
 from pathlib import Path
 import paramiko
 from contextlib import asynccontextmanager

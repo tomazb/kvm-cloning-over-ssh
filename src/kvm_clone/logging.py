@@ -1,8 +1,7 @@
 import json
 import logging
 import sys
-import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from datetime import datetime, timezone
 
 class StructuredLogger:

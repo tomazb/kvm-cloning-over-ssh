@@ -9,7 +9,6 @@ import re
 import shlex
 from pathlib import Path
 from typing import List, Optional, Any
-import paramiko
 
 from .exceptions import ValidationError
 

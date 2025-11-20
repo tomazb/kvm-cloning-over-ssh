@@ -4,14 +4,12 @@ VM synchronization operations.
 This module handles VM synchronization (incremental updates) between hosts.
 """
 
-import asyncio
-import logging
 import uuid
 from typing import Optional, Callable
 from datetime import datetime
 
 from .models import SyncOptions, SyncResult, ProgressInfo, DeltaInfo, OperationType, OperationStatusEnum
-from .exceptions import VMNotFoundError, TransferError, ValidationError, LibvirtError
+from .exceptions import VMNotFoundError, TransferError, ValidationError
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
@@ -69,9 +67,9 @@ class VMSynchronizer:
                 dest_vm_info = await self.libvirt.get_vm_info(dest_conn, target_vm_name)
             
             # Calculate delta if requested
-            delta_info = None
+            _delta_info = None
             if sync_options.delta_only:
-                delta_info = await self.calculate_delta(source_host, dest_host, vm_name, target_vm_name)
+                _delta_info = await self.calculate_delta(source_host, dest_host, vm_name, target_vm_name)
             
             # Create checkpoint if requested
             if sync_options.checkpoint:
@@ -182,7 +180,7 @@ class VMSynchronizer:
             # or qemu-img compare to calculate actual differences
             for i, source_disk in enumerate(source_vm_info.disks):
                 if i < len(dest_vm_info.disks):
-                    dest_disk = dest_vm_info.disks[i]
+                    _dest_disk = dest_vm_info.disks[i]
                     
                     # Simplified: assume some percentage has changed
                     # Real implementation would compare checksums, modification times, etc.
