@@ -209,7 +209,7 @@ key: value
         
         try:
             loader = ConfigLoader()
-            with pytest.raises(ConfigurationError, match="Failed to parse configuration file"):
+            with pytest.raises(ConfigurationError, match="Invalid configuration"):
                 loader.load_config(temp_path)
         finally:
             os.unlink(temp_path)

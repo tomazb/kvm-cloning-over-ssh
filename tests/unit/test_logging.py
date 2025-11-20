@@ -134,7 +134,9 @@ class TestJsonFormatter:
             args=(),
             exc_info=None
         )
-        record.extra = {"operation_id": "123", "user": "admin"}
+        # When extra={...} is passed to logger, fields are added directly to LogRecord
+        record.operation_id = "123"
+        record.user = "admin"
         
         output = formatter.format(record)
         data = json.loads(output)
@@ -180,9 +182,8 @@ class TestStructuredLoggerMethods:
         data = self.get_log_output()
         
         assert data["message"] == "Operation started"
-        assert "extra" in data
-        assert data["extra"]["operation_id"] == "op-123"
-        assert data["extra"]["host"] == "server1"
+        assert data["operation_id"] == "op-123"
+        assert data["host"] == "server1"
     
     def test_error_method(self):
         """Test error logging method."""
@@ -218,8 +219,8 @@ class TestStructuredLoggerMethods:
         data = self.get_log_output()
         
         assert data["message"] == "Disk space low"
-        assert data["extra"]["path"] == "/var"
-        assert data["extra"]["available_gb"] == 5
+        assert data["path"] == "/var"
+        assert data["available_gb"] == 5
     
     def test_debug_method(self):
         """Test debug logging method."""
@@ -236,8 +237,8 @@ class TestStructuredLoggerMethods:
         self.test_logger.debug("Connection details", host="server", port=22)
         data = self.get_log_output()
         
-        assert data["extra"]["host"] == "server"
-        assert data["extra"]["port"] == 22
+        assert data["host"] == "server"
+        assert data["port"] == 22
     
     def test_critical_method(self):
         """Test critical logging method."""
@@ -378,8 +379,8 @@ class TestLoggingEdgeCases:
         self.test_logger.info("Message", value=None, empty=None)
         output = self.stream.getvalue()
         data = json.loads(output.strip())
-        assert data["extra"]["value"] is None
-        assert data["extra"]["empty"] is None
+        assert data["value"] is None
+        assert data["empty"] is None
     
     def test_complex_data_in_kwargs(self):
         """Test logging with complex data structures in kwargs."""
@@ -391,9 +392,9 @@ class TestLoggingEdgeCases:
         )
         output = self.stream.getvalue()
         data = json.loads(output.strip())
-        assert data["extra"]["list_data"] == [1, 2, 3]
-        assert data["extra"]["dict_data"] == {"key": "value"}
-        assert data["extra"]["nested"]["level1"]["level2"] == "value"
+        assert data["list_data"] == [1, 2, 3]
+        assert data["dict_data"] == {"key": "value"}
+        assert data["nested"]["level1"]["level2"] == "value"
     
     def test_logging_numbers(self):
         """Test logging various number types."""
@@ -406,18 +407,18 @@ class TestLoggingEdgeCases:
         )
         output = self.stream.getvalue()
         data = json.loads(output.strip())
-        assert data["extra"]["integer"] == 42
-        assert data["extra"]["float_val"] == 3.14159
-        assert data["extra"]["negative"] == -100
-        assert data["extra"]["zero"] == 0
+        assert data["integer"] == 42
+        assert data["float_val"] == 3.14159
+        assert data["negative"] == -100
+        assert data["zero"] == 0
     
     def test_logging_booleans(self):
         """Test logging boolean values."""
         self.test_logger.info("Booleans", true_val=True, false_val=False)
         output = self.stream.getvalue()
         data = json.loads(output.strip())
-        assert data["extra"]["true_val"] is True
-        assert data["extra"]["false_val"] is False
+        assert data["true_val"] is True
+        assert data["false_val"] is False
 
 
 class TestLoggingConcurrency:
