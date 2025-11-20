@@ -484,11 +484,15 @@ def config_set(key: str, value: str, config_dir: str) -> None:
 @config.command("unset")
 @click.argument("key")
 @click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
-def config_unset(key: str, config_dir: str) -> None:
+@click.option("--ignore-missing", is_flag=True, help="Don't error if key doesn't exist (idempotent)")
+def config_unset(key: str, config_dir: str, ignore_missing: bool) -> None:
     """Remove a configuration value."""
     config_path = Path(config_dir).expanduser() / "config.yaml"
 
     if not config_path.exists():
+        if ignore_missing:
+            click.echo(f"✓ Key {key} already absent (no config file)")
+            return
         click.echo(f"Configuration file not found at {config_path}", err=True)
         sys.exit(1)
 
@@ -502,8 +506,11 @@ def config_unset(key: str, config_dir: str) -> None:
                 yaml.dump(config_data, f, default_flow_style=False)
             click.echo(f"✓ Removed {key}")
         else:
-            click.echo(f"Key '{key}' not found in configuration", err=True)
-            sys.exit(1)
+            if ignore_missing:
+                click.echo(f"✓ Key {key} already absent")
+            else:
+                click.echo(f"Key '{key}' not found in configuration", err=True)
+                sys.exit(1)
 
     except Exception as e:
         click.echo(f"Error updating configuration: {e}", err=True)
