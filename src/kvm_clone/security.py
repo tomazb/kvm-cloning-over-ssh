@@ -5,12 +5,16 @@ This module provides input validation, command sanitization, and path security
 functions to prevent common security vulnerabilities.
 """
 
+import os
 import re
 import shlex
 from pathlib import Path
 from typing import List, Optional, Any
 
+import paramiko
+
 from .exceptions import ValidationError
+from .logging import logger
 
 
 class SecurityValidator:
@@ -352,20 +356,15 @@ class SSHSecurity:
         Returns:
             paramiko.MissingHostKeyPolicy: Host key policy
         """
-        import paramiko
-        import os
-
         policy_name = os.getenv('KVM_CLONE_SSH_HOST_KEY_POLICY', 'strict').lower()
 
         if policy_name == 'accept':
-            from .logging import logger
             logger.warning(
                 "Using AutoAddPolicy for SSH host keys. "
                 "This is insecure and should only be used for testing!"
             )
             return paramiko.AutoAddPolicy()
         elif policy_name == 'warn':
-            from .logging import logger
             logger.info(
                 "Using WarningPolicy for SSH host keys. "
                 "Unknown hosts will trigger a warning but connection will proceed."

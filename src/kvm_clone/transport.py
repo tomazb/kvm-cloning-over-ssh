@@ -6,8 +6,7 @@ This module handles SSH connections and secure data transfer between hosts.
 
 import asyncio
 import os
-import time
-from typing import Optional, Dict, Callable, AsyncIterator
+from typing import Optional, Dict, Callable, AsyncIterator, Any
 from pathlib import Path
 import paramiko
 from contextlib import asynccontextmanager
@@ -53,7 +52,7 @@ class SSHConnection:
         # Load SSH config for this host
         self._ssh_config = self._load_ssh_config()
 
-    def _load_ssh_config(self) -> Optional[Dict[str, any]]:
+    def _load_ssh_config(self) -> Optional[Dict[str, Any]]:
         """Load SSH configuration for the host from ~/.ssh/config."""
         try:
             ssh_config_path = Path.home() / ".ssh" / "config"
@@ -137,24 +136,31 @@ class SSHConnection:
                     "look_for_keys": True,  # Look in ~/.ssh/ for keys
                 }
 
-                # Add explicit key if provided
+                # Resolve key_filename: explicit key (highest priority) or SSH config IdentityFile
+                key_filenames = None
+
+                # 1. Explicit key_path (CLI / config) takes precedence
                 if self.key_path:
                     try:
                         validated_key_path = SSHSecurity.validate_ssh_key_path(self.key_path)
-                        connect_kwargs["key_filename"] = validated_key_path
+                        key_filenames = validated_key_path
                         logger.debug(f"Using SSH key: {validated_key_path}")
                     except Exception as key_error:
                         # Log warning but continue - might work with agent or other keys
-                        logger.warning(f"SSH key validation failed, will try other methods: {key_error}")
-                        connect_kwargs["key_filename"] = None
+                        logger.warning(
+                            f"SSH key validation failed, will try other methods: {key_error}"
+                        )
 
-                # Also check SSH config for IdentityFile
-                if self._ssh_config and 'identityfile' in self._ssh_config:
-                    identity_files = self._ssh_config['identityfile']
+                # 2. Fall back to IdentityFile from SSH config if no explicit key was usable
+                if key_filenames is None and self._ssh_config and "identityfile" in self._ssh_config:
+                    identity_files = self._ssh_config["identityfile"]
                     if isinstance(identity_files, list):
-                        connect_kwargs["key_filename"] = [str(Path(f).expanduser()) for f in identity_files]
+                        key_filenames = [str(Path(f).expanduser()) for f in identity_files]
                     else:
-                        connect_kwargs["key_filename"] = str(Path(identity_files).expanduser())
+                        key_filenames = str(Path(identity_files).expanduser())
+
+                if key_filenames is not None:
+                    connect_kwargs["key_filename"] = key_filenames
 
                 # Connect in executor to avoid blocking
                 loop = asyncio.get_event_loop()
@@ -263,7 +269,7 @@ class SSHConnection:
         if self.key_path:
             suggestions.extend([
                 "",
-                f"2. Check that your SSH key exists and has correct permissions:",
+                "2. Check that your SSH key exists and has correct permissions:",
                 f"   ls -l {self.key_path}",
                 f"   chmod 600 {self.key_path}",
             ])

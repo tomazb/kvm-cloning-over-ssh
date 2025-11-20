@@ -7,6 +7,7 @@ This module provides the CLI interface as specified in the API documentation.
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Any
@@ -423,11 +424,16 @@ def config_init(config_dir: str) -> None:
     click.echo(f"Configuration initialized at {config_file}")
 
 
-@config.command("get")
-@click.argument("key")
-@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
-def config_get(key: str, config_dir: str) -> None:
-    """Get a configuration value."""
+def _load_config_file(config_dir: str) -> tuple[Path, dict]:
+    """
+    Helper to load configuration file.
+    
+    Returns:
+        Tuple of (config_path, config_data)
+    
+    Raises:
+        SystemExit if config file doesn't exist
+    """
     config_path = Path(config_dir).expanduser() / "config.yaml"
 
     if not config_path.exists():
@@ -438,15 +444,23 @@ def config_get(key: str, config_dir: str) -> None:
     try:
         with open(config_path, "r") as f:
             config_data = yaml.safe_load(f) or {}
-
-        if key in config_data:
-            click.echo(f"{key}: {config_data[key]}")
-        else:
-            click.echo(f"Key '{key}' not found in configuration", err=True)
-            sys.exit(1)
-
+        return config_path, config_data
     except Exception as e:
         click.echo(f"Error reading configuration: {e}", err=True)
+        sys.exit(1)
+
+
+@config.command("get")
+@click.argument("key")
+@click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
+def config_get(key: str, config_dir: str) -> None:
+    """Get a configuration value."""
+    config_path, config_data = _load_config_file(config_dir)
+
+    if key in config_data:
+        click.echo(f"{key}: {config_data[key]}")
+    else:
+        click.echo(f"Key '{key}' not found in configuration", err=True)
         sys.exit(1)
 
 
@@ -467,16 +481,22 @@ def config_set(key: str, value: str, config_dir: str) -> None:
         config_data = {}
 
     # Convert value to appropriate type
-    if value.lower() == "null" or value.lower() == "none":
+    l_value = value.lower()
+    if l_value in ("null", "none"):
         config_data[key] = None
-    elif value.lower() == "true":
+    elif l_value == "true":
         config_data[key] = True
-    elif value.lower() == "false":
+    elif l_value == "false":
         config_data[key] = False
-    elif value.isdigit():
-        config_data[key] = int(value)
     else:
-        config_data[key] = value
+        # Try int, then float, then keep as string
+        try:
+            config_data[key] = int(value)
+        except ValueError:
+            try:
+                config_data[key] = float(value)
+            except ValueError:
+                config_data[key] = value
 
     # Save config
     try:
@@ -528,27 +548,14 @@ def config_unset(key: str, config_dir: str, ignore_missing: bool) -> None:
 @click.option("--config-dir", default="~/.config/kvm-clone", help="Configuration directory")
 def config_list(config_dir: str) -> None:
     """List all configuration values."""
-    config_path = Path(config_dir).expanduser() / "config.yaml"
+    config_path, config_data = _load_config_file(config_dir)
 
-    if not config_path.exists():
-        click.echo(f"Configuration file not found at {config_path}", err=True)
-        click.echo("Run 'kvm-clone config init' to create one.", err=True)
-        sys.exit(1)
-
-    try:
-        with open(config_path, "r") as f:
-            config_data = yaml.safe_load(f) or {}
-
-        if config_data:
-            click.echo(f"Configuration from {config_path}:\n")
-            for key, value in sorted(config_data.items()):
-                click.echo(f"  {key}: {value}")
-        else:
-            click.echo("Configuration file is empty")
-
-    except Exception as e:
-        click.echo(f"Error reading configuration: {e}", err=True)
-        sys.exit(1)
+    if config_data:
+        click.echo(f"Configuration from {config_path}:\n")
+        for key, value in sorted(config_data.items()):
+            click.echo(f"  {key}: {value}")
+    else:
+        click.echo("Configuration file is empty")
 
 
 @config.command("path")
