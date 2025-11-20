@@ -11,9 +11,11 @@ Phase 4 focused on preventing the most common failure modes and ensuring operati
 ## 1. 💾 Disk Space Verification
 
 ### Problem
+
 Clone operations would start transferring large disk images, only to fail halfway through when the destination ran out of disk space. This wasted time, bandwidth, and left partial files requiring manual cleanup.
 
 ### Solution
+
 Pre-flight disk space validation that checks available space **before** starting any transfers.
 
 ### How It Works
@@ -76,9 +78,11 @@ Please free up at least 7.27 GB on dest-host before retrying.
 ## 2. 🔄 Transactional Cloning
 
 ### Problem
+
 Clone operations could fail partway through, leaving partial clones: VM definition created but disks not fully transferred, or vice versa. This required manual cleanup before retrying.
 
 ### Solution
+
 All-or-nothing atomic operations using a transaction framework with automatic rollback on any failure.
 
 ### How It Works
@@ -160,9 +164,11 @@ async with CloneTransaction(operation_id, self.transport) as txn:
 ### Rollback Behavior
 
 If **any** error occurs during cloning:
+
 1. Transaction context exits with exception
 2. Rollback triggered automatically
 3. Resources cleaned up in **reverse order**:
+
    - Undefine VM (if created)
    - Delete temporary disk files
    - Remove staging directory
@@ -183,9 +189,11 @@ If **any** error occurs during cloning:
 ## 3. 🔁 Idempotent Operations
 
 ### Problem
+
 If a clone operation failed or was interrupted, retrying would fail with "VM already exists" error, requiring manual cleanup before retry. This made automation and CI/CD pipelines difficult.
 
 ### Solution
+
 `--idempotent` flag that automatically detects and cleans up existing VMs before cloning, making operations safely retry-able.
 
 ### How It Works
@@ -291,12 +299,16 @@ INFO: Starting clone operation ...
 All three features have comprehensive test coverage:
 
 ### Disk Space Verification Tests
+
+
 - Storage pool querying
 - Space calculation with safety margin
 - Error/warning thresholds
 - CPU and memory validation
 
 ### Transaction Tests (16 tests)
+
+
 - Transaction commit/rollback
 - Resource registration and cleanup
 - Rollback ordering (reverse order)
@@ -305,6 +317,8 @@ All three features have comprehensive test coverage:
 - Temporary file moves on commit
 
 ### Idempotent Tests (10 tests)
+
+
 - CloneOptions idempotent flag
 - VM cleanup (stop, undefine, delete disks)
 - Non-existent VM handling
@@ -320,6 +334,7 @@ All three features have comprehensive test coverage:
 
 ```text
 Clone Operation Failure Rate: ~30%
+
 - Out of disk space: 40%
 - Partial clones: 35%
 - Retry conflicts: 25%
@@ -332,6 +347,7 @@ Time to recover from failure: 10-30 minutes
 
 ```text
 Clone Operation Failure Rate: <5%
+
 - Out of disk space: 0% (prevented)
 - Partial clones: 0% (transactional)
 - Retry conflicts: 0% (idempotent)
