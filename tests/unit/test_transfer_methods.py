@@ -307,3 +307,231 @@ async def test_local_copy_uses_cp_not_rsync(mock_transport, mock_libvirt):
     call_args = mock_conn.execute_command.call_args[0][0]
     assert "cp" in call_args
     assert "rsync" not in call_args
+
+
+# ============================================================================
+# Blocksync Transfer Method Tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_blocksync_enum_value():
+    """Test that TransferMethod has BLOCKSYNC value."""
+    assert TransferMethod.BLOCKSYNC.value == "blocksync"
+
+
+@pytest.mark.asyncio
+async def test_blocksync_transfer_called(mock_transport, mock_libvirt):
+    """Test that blocksync transfer method is called when specified."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    # Mock the transfer method
+    with patch.object(cloner, '_transfer_disk_blocksync', new_callable=AsyncMock) as mock_blocksync:
+        await cloner._transfer_disk_image_to_path(
+            "source_host",
+            "dest_host",
+            "/var/lib/libvirt/images/disk1.qcow2",
+            "/tmp/staging/disk1.qcow2",
+            None,
+            "test-op-123",
+            transfer_method=TransferMethod.BLOCKSYNC,
+        )
+
+        # Verify blocksync was called
+        assert mock_blocksync.called
+        assert mock_blocksync.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_blocksync_checks_installation(mock_transport, mock_libvirt):
+    """Test that blocksync checks if tool is installed on both hosts."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    # Mock to return success for blocksync check
+    mock_conn = await mock_transport.connect.return_value.__aenter__()
+    mock_conn.execute_command = AsyncMock(
+        side_effect=[
+            ("/usr/bin/blocksync", "", 0),  # Source check
+            ("/usr/bin/blocksync", "", 0),  # Dest check
+            ("", "", 0),  # mkdir
+            ("new", "", 0),  # test -f (file doesn't exist)
+            ("", "", 0),  # blocksync command
+        ]
+    )
+
+    await cloner._transfer_disk_blocksync(
+        "source_host",
+        "dest_host",
+        "/var/lib/libvirt/images/disk1.qcow2",
+        "/tmp/staging/disk1.qcow2",
+        None,
+        "test-op-123",
+    )
+
+    # Verify installation check commands were called
+    calls = [call[0][0] for call in mock_conn.execute_command.call_args_list]
+    assert any("command -v blocksync" in call for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_blocksync_fails_if_not_installed_on_source(mock_transport, mock_libvirt):
+    """Test that blocksync fails with clear error if not installed on source."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    # Mock to return failure for blocksync check on source
+    mock_conn = await mock_transport.connect.return_value.__aenter__()
+    mock_conn.execute_command = AsyncMock(return_value=("", "command not found", 1))
+
+    with pytest.raises(Exception) as exc_info:
+        await cloner._transfer_disk_blocksync(
+            "source_host",
+            "dest_host",
+            "/var/lib/libvirt/images/disk1.qcow2",
+            "/tmp/staging/disk1.qcow2",
+            None,
+            "test-op-123",
+        )
+
+    # Verify error message mentions installation
+    assert "not installed" in str(exc_info.value).lower()
+    assert "github.com/nethappen/blocksync-fast" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_blocksync_detects_incremental_sync(mock_transport, mock_libvirt):
+    """Test that blocksync detects if destination file exists for incremental sync."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    # Mock to simulate existing destination file
+    mock_conn = await mock_transport.connect.return_value.__aenter__()
+    mock_conn.execute_command = AsyncMock(
+        side_effect=[
+            ("/usr/bin/blocksync", "", 0),  # Source check
+            ("/usr/bin/blocksync", "", 0),  # Dest check
+            ("", "", 0),  # mkdir
+            ("exists", "", 0),  # test -f (file exists - incremental!)
+            ("", "", 0),  # blocksync command
+        ]
+    )
+
+    await cloner._transfer_disk_blocksync(
+        "source_host",
+        "dest_host",
+        "/var/lib/libvirt/images/disk1.qcow2",
+        "/tmp/staging/disk1.qcow2",
+        None,
+        "test-op-123",
+    )
+
+    # Verify test command was executed
+    calls = [call[0][0] for call in mock_conn.execute_command.call_args_list]
+    assert any("test -f" in call for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_blocksync_builds_correct_command(mock_transport, mock_libvirt):
+    """Test that blocksync builds correct command with all options."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    mock_transport.port = 22
+    mock_transport.username = "testuser"
+
+    # Mock responses
+    mock_conn = await mock_transport.connect.return_value.__aenter__()
+    mock_conn.execute_command = AsyncMock(
+        side_effect=[
+            ("/usr/bin/blocksync", "", 0),  # Source check
+            ("/usr/bin/blocksync", "", 0),  # Dest check
+            ("", "", 0),  # mkdir
+            ("new", "", 0),  # test -f
+            ("", "", 0),  # blocksync command
+        ]
+    )
+
+    await cloner._transfer_disk_blocksync(
+        "source_host",
+        "dest_host",
+        "/var/lib/libvirt/images/disk1.qcow2",
+        "/tmp/staging/disk1.qcow2",
+        None,
+        "test-op-123",
+        bandwidth_limit="100M",
+    )
+
+    # Get the blocksync command (should be the last call)
+    blocksync_call = mock_conn.execute_command.call_args_list[-1][0][0]
+
+    # Verify command structure
+    assert "blocksync" in blocksync_call
+    assert "/var/lib/libvirt/images/disk1.qcow2" in blocksync_call
+    assert "dest_host" in blocksync_call
+    assert "/tmp/staging/disk1.qcow2" in blocksync_call
+    assert "-v" in blocksync_call  # Verbose flag
+
+
+@pytest.mark.asyncio
+async def test_blocksync_converts_bandwidth_limit(mock_transport, mock_libvirt):
+    """Test that blocksync converts bandwidth limit from rsync format to MB/s."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    mock_transport.port = 22
+    mock_transport.username = "testuser"
+
+    # Mock responses
+    mock_conn = await mock_transport.connect.return_value.__aenter__()
+    mock_conn.execute_command = AsyncMock(
+        side_effect=[
+            ("/usr/bin/blocksync", "", 0),  # Source check
+            ("/usr/bin/blocksync", "", 0),  # Dest check
+            ("", "", 0),  # mkdir
+            ("new", "", 0),  # test -f
+            ("", "", 0),  # blocksync command
+        ]
+    )
+
+    await cloner._transfer_disk_blocksync(
+        "source_host",
+        "dest_host",
+        "/var/lib/libvirt/images/disk1.qcow2",
+        "/tmp/staging/disk1.qcow2",
+        None,
+        "test-op-123",
+        bandwidth_limit="100M",  # rsync format
+    )
+
+    # Get the blocksync command
+    blocksync_call = mock_conn.execute_command.call_args_list[-1][0][0]
+
+    # Should convert 100M to 100 (MB/s)
+    assert "--bwlimit" in blocksync_call or "100" in blocksync_call
+
+
+@pytest.mark.asyncio
+async def test_blocksync_creates_dest_directory(mock_transport, mock_libvirt):
+    """Test that blocksync creates destination directory if needed."""
+    cloner = VMCloner(mock_transport, mock_libvirt)
+
+    # Mock responses
+    mock_conn = await mock_transport.connect.return_value.__aenter__()
+    mock_conn.execute_command = AsyncMock(
+        side_effect=[
+            ("/usr/bin/blocksync", "", 0),  # Source check
+            ("/usr/bin/blocksync", "", 0),  # Dest check
+            ("", "", 0),  # mkdir
+            ("new", "", 0),  # test -f
+            ("", "", 0),  # blocksync command
+        ]
+    )
+
+    await cloner._transfer_disk_blocksync(
+        "source_host",
+        "dest_host",
+        "/var/lib/libvirt/images/disk1.qcow2",
+        "/var/lib/libvirt/images/staging/disk1.qcow2",
+        None,
+        "test-op-123",
+    )
+
+    # Verify mkdir was called
+    calls = [call[0][0] for call in mock_conn.execute_command.call_args_list]
+    assert any("mkdir" in call for call in calls)

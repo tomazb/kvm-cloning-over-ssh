@@ -43,6 +43,7 @@ class TransferMethod(Enum):
 
     RSYNC = "rsync"  # Optimized rsync (default, most reliable)
     LIBVIRT_STREAM = "libvirt"  # Native libvirt streaming (fastest)
+    BLOCKSYNC = "blocksync"  # blocksync-fast (efficient block-level sync)
 
 
 @dataclass

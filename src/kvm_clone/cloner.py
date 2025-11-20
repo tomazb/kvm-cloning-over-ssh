@@ -512,6 +512,16 @@ class VMCloner:
                     progress_callback,
                     operation_id,
                 )
+            elif transfer_method == TransferMethod.BLOCKSYNC:
+                await self._transfer_disk_blocksync(
+                    source_host,
+                    dest_host,
+                    source_path,
+                    dest_path,
+                    progress_callback,
+                    operation_id,
+                    bandwidth_limit,
+                )
             else:
                 # Default: Use optimized rsync
                 await self._transfer_disk_rsync(
@@ -699,4 +709,150 @@ class VMCloner:
             )
             raise TransferError(
                 f"Libvirt streaming transfer failed: {e}", source_host, dest_host
+            )
+
+    async def _transfer_disk_blocksync(
+        self,
+        source_host: str,
+        dest_host: str,
+        source_path: str,
+        dest_path: str,
+        progress_callback: Optional[Callable[[ProgressInfo], None]],
+        operation_id: str,
+        bandwidth_limit: Optional[str] = None,
+    ) -> None:
+        """
+        Transfer disk image using blocksync-fast for efficient block-level synchronization.
+
+        blocksync-fast is optimal for incremental updates where only a small portion
+        of the disk has changed. It performs block-level diffing and only transfers
+        the differing blocks, making it 10-100x faster than rsync for incremental syncs.
+
+        Performance characteristics:
+        - First-time sync: Similar to rsync (all blocks transferred)
+        - Incremental sync: 10-100x faster (only changed blocks transferred)
+        - Best for: Regular sync operations, disaster recovery, backup systems
+        - Requirements: blocksync-fast must be installed on both source and dest
+
+        Args:
+            source_host: Source host
+            dest_host: Destination host
+            source_path: Source disk image path
+            dest_path: Destination disk image path
+            progress_callback: Progress callback
+            operation_id: Operation ID for progress tracking
+            bandwidth_limit: Bandwidth limit in MB/s (e.g., "100")
+        """
+        import shlex
+        import os
+
+        logger.info(
+            f"Transferring disk with blocksync-fast: {source_path} -> {dest_host}:{dest_path}",
+            operation_id=operation_id,
+        )
+
+        try:
+            # Check if blocksync is installed on source
+            async with self.transport.connect(source_host) as source_conn:
+                check_cmd = "command -v blocksync"
+                stdout, stderr, exit_code = await source_conn.execute_command(check_cmd)
+                if exit_code != 0:
+                    raise TransferError(
+                        "blocksync-fast is not installed on source host. "
+                        "Install it from: https://github.com/nethappen/blocksync-fast",
+                        source_host,
+                        dest_host
+                    )
+
+            # Check if blocksync is installed on destination
+            async with self.transport.connect(dest_host) as dest_conn:
+                check_cmd = "command -v blocksync"
+                stdout, stderr, exit_code = await dest_conn.execute_command(check_cmd)
+                if exit_code != 0:
+                    raise TransferError(
+                        "blocksync-fast is not installed on destination host. "
+                        "Install it from: https://github.com/nethappen/blocksync-fast",
+                        source_host,
+                        dest_host
+                    )
+
+                # Create destination directory if needed
+                dest_dir = os.path.dirname(dest_path)
+                mkdir_cmd = CommandBuilder.mkdir(dest_dir)
+                await dest_conn.execute_command(mkdir_cmd)
+
+                # Check if destination file exists (for incremental sync)
+                stat_cmd = f"test -f {shlex.quote(dest_path)} && echo 'exists' || echo 'new'"
+                stdout, stderr, exit_code = await dest_conn.execute_command(stat_cmd)
+                is_incremental = stdout.strip() == "exists"
+
+                if is_incremental:
+                    logger.info(
+                        f"Destination file exists, performing incremental sync",
+                        operation_id=operation_id,
+                    )
+                else:
+                    logger.info(
+                        f"Destination file does not exist, performing full sync",
+                        operation_id=operation_id,
+                    )
+
+            # Build blocksync command
+            async with self.transport.connect(source_host) as source_conn:
+                # Convert bandwidth limit from rsync format (e.g., "100M") to MB/s (e.g., "100")
+                bw_limit_mb = None
+                if bandwidth_limit:
+                    import re
+                    match = re.match(r'^(\d+)([KMG])?$', bandwidth_limit)
+                    if match:
+                        value = int(match.group(1))
+                        unit = match.group(2) or 'K'
+                        # Convert to MB/s
+                        if unit == 'K':
+                            bw_limit_mb = str(max(1, value // 1024))
+                        elif unit == 'M':
+                            bw_limit_mb = str(value)
+                        elif unit == 'G':
+                            bw_limit_mb = str(value * 1024)
+
+                command = CommandBuilder.build_blocksync_command(
+                    source_path=source_path,
+                    dest_path=dest_path,
+                    dest_host=dest_host,
+                    ssh_port=self.transport.port or 22,
+                    ssh_user=self.transport.username,
+                    bandwidth_limit=bw_limit_mb,
+                )
+
+                logger.debug(
+                    f"Executing blocksync command",
+                    operation_id=operation_id,
+                    command=command,
+                )
+
+                stdout, stderr, exit_code = await source_conn.execute_command(command)
+
+                if exit_code != 0:
+                    raise TransferError(
+                        f"blocksync-fast transfer failed: {stderr}",
+                        source_host,
+                        dest_host
+                    )
+
+            logger.info(
+                f"blocksync-fast transfer completed successfully",
+                operation_id=operation_id,
+                incremental=is_incremental,
+            )
+
+        except Exception as e:
+            logger.error(
+                f"blocksync-fast transfer failed: {e}",
+                operation_id=operation_id,
+                exc_info=True,
+            )
+            # If blocksync fails, we could fall back to rsync
+            # For now, just raise the error
+            raise TransferError(
+                f"blocksync-fast transfer failed: {e}", source_host, dest_host
             )

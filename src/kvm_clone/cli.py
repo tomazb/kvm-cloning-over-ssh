@@ -137,9 +137,9 @@ def cli(
 @click.option(
     "--transfer-method",
     "-m",
-    type=click.Choice(["rsync", "libvirt"], case_sensitive=False),
+    type=click.Choice(["rsync", "libvirt", "blocksync"], case_sensitive=False),
     default="rsync",
-    help="Transfer method: rsync (default, most reliable) or libvirt (fastest)",
+    help="Transfer method: rsync (default), libvirt (fastest), or blocksync (best for incremental)",
 )
 @click.pass_context
 def clone(
@@ -178,11 +178,12 @@ def clone(
 
             async with KVMCloneClient(config=client_config, timeout=timeout) as client:
                 # Convert transfer method string to enum
-                transfer_method_enum = (
-                    TransferMethod.LIBVIRT_STREAM
-                    if transfer_method.lower() == "libvirt"
-                    else TransferMethod.RSYNC
-                )
+                if transfer_method.lower() == "libvirt":
+                    transfer_method_enum = TransferMethod.LIBVIRT_STREAM
+                elif transfer_method.lower() == "blocksync":
+                    transfer_method_enum = TransferMethod.BLOCKSYNC
+                else:
+                    transfer_method_enum = TransferMethod.RSYNC
 
                 clone_options = CloneOptions(
                     new_name=new_name,

@@ -266,6 +266,90 @@ class CommandBuilder:
         return " ".join(cmd_parts)
 
     @staticmethod
+    def build_blocksync_command(
+        source_path: str,
+        dest_path: str,
+        dest_host: Optional[str] = None,
+        ssh_port: int = 22,
+        ssh_user: Optional[str] = None,
+        bandwidth_limit: Optional[str] = None,
+    ) -> str:
+        """
+        Build a safe blocksync-fast command for efficient block-level synchronization.
+
+        blocksync-fast (https://github.com/nethappen/blocksync-fast) is a tool for
+        efficiently synchronizing block devices over SSH by only transferring
+        differing blocks.
+
+        Performance characteristics:
+        - Best for: Incremental updates, large disk images with small changes
+        - Block-level diffing reduces transfer size significantly
+        - Can be 10-100x faster than rsync for incremental syncs
+        - First-time sync similar to rsync, but subsequent syncs much faster
+
+        Args:
+            source_path: Source file/device path
+            dest_path: Destination file/device path
+            dest_host: Destination host (for remote sync)
+            ssh_port: SSH port (default: 22)
+            ssh_user: SSH username (default: None, uses current user)
+            bandwidth_limit: Bandwidth limit in MB/s (e.g., "100")
+
+        Returns:
+            str: Safe blocksync command
+
+        Raises:
+            ValidationError: If parameters are invalid
+        """
+        # Validate paths
+        SecurityValidator.validate_path(source_path)
+        SecurityValidator.validate_path(dest_path)
+
+        # Basic command with source
+        cmd_parts = ["blocksync", shlex.quote(source_path)]
+
+        # Build destination target
+        if dest_host:
+            # Validate destination host
+            dest_host = SecurityValidator.validate_hostname(dest_host)
+
+            # Validate port
+            if not (1 <= ssh_port <= 65535):
+                raise ValidationError(f"Invalid SSH port: {ssh_port}")
+
+            # Build SSH target
+            if ssh_user:
+                ssh_user = SecurityValidator.validate_vm_name(ssh_user)  # Reuse validation
+                ssh_target = f"{ssh_user}@{dest_host}"
+            else:
+                ssh_target = dest_host
+
+            # Add SSH options
+            cmd_parts.extend(["-s", f"{shlex.quote(ssh_target)}:{shlex.quote(dest_path)}"])
+
+            # Add SSH port if non-standard
+            if ssh_port != 22:
+                cmd_parts.extend(["-p", str(ssh_port)])
+        else:
+            # Local sync
+            cmd_parts.append(shlex.quote(dest_path))
+
+        # Add bandwidth limit if specified
+        if bandwidth_limit:
+            # Validate bandwidth limit format (MB/s)
+            if not re.match(r"^\d+$", bandwidth_limit):
+                raise ValidationError(
+                    f"Invalid bandwidth limit format: {bandwidth_limit}. "
+                    "Should be a number in MB/s (e.g., '100')"
+                )
+            cmd_parts.extend(["--bwlimit", bandwidth_limit])
+
+        # Add verbose flag for progress monitoring
+        cmd_parts.append("-v")
+
+        return " ".join(cmd_parts)
+
+    @staticmethod
     def build_virsh_command(action: str, vm_name: str, *args: Any) -> str:
         """
         Build a safe virsh command.
