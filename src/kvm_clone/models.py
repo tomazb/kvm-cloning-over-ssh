@@ -90,6 +90,7 @@ class CloneOptions:
     preserve_mac: bool = False
     network_config: Optional[Dict[str, Any]] = None
     bandwidth_limit: Optional[str] = None  # e.g., "100M", "1G"
+    idempotent: bool = False  # Auto-cleanup existing VM on retry
 
 
 @dataclass

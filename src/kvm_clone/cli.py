@@ -110,6 +110,11 @@ def cli(
 @click.argument("vm_name")
 @click.option("--new-name", "-n", help="Name for cloned VM")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing VM")
+@click.option(
+    "--idempotent",
+    is_flag=True,
+    help="Auto-cleanup existing VM and retry (safe for automation)",
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option(
     "--parallel", "-p", type=int, default=4, help="Number of parallel transfers"
@@ -135,6 +140,7 @@ def clone(
     vm_name: str,
     new_name: Optional[str],
     force: bool,
+    idempotent: bool,
     dry_run: bool,
     parallel: int,
     compress: bool,
@@ -164,6 +170,7 @@ def clone(
                 clone_options = CloneOptions(
                     new_name=new_name,
                     force=force,
+                    idempotent=idempotent,
                     dry_run=dry_run,
                     parallel=parallel,
                     compress=compress,

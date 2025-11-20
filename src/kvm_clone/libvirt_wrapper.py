@@ -373,6 +373,75 @@ class LibvirtWrapper:
         except libvirt.libvirtError as e:
             raise LibvirtError(str(e), "vm_exists")
 
+    async def cleanup_vm(self, ssh_conn: SSHConnection, vm_name: str) -> None:
+        """
+        Clean up a VM by undefining it and removing all storage.
+
+        Args:
+            ssh_conn: SSH connection to the host
+            vm_name: Name of VM to clean up
+        """
+        from .security import SecurityValidator, CommandBuilder
+
+        try:
+            conn = await self.connect_to_host(ssh_conn)
+            SecurityValidator.validate_vm_name(vm_name)
+
+            # Get VM
+            try:
+                domain = conn.lookupByName(vm_name)
+            except libvirt.libvirtError:
+                # VM doesn't exist, nothing to cleanup
+                logger.debug(f"VM {vm_name} not found, nothing to cleanup")
+                return
+
+            # Stop VM if running
+            if domain.isActive():
+                logger.info(f"Stopping VM {vm_name} for cleanup")
+                try:
+                    domain.destroy()  # Force stop
+                except libvirt.libvirtError as e:
+                    logger.warning(f"Failed to stop VM {vm_name}: {e}")
+
+            # Get disk paths before undefining
+            disk_paths = []
+            try:
+                xml_desc = domain.XMLDesc(0)
+                import xml.etree.ElementTree as ET
+
+                root = ET.fromstring(xml_desc)
+                for disk_elem in root.findall(".//disk[@type='file']"):
+                    source_elem = disk_elem.find("source")
+                    if source_elem is not None:
+                        disk_path = source_elem.get("file")
+                        if disk_path:
+                            disk_paths.append(disk_path)
+            except Exception as e:
+                logger.warning(f"Failed to extract disk paths from {vm_name}: {e}")
+
+            # Undefine VM
+            try:
+                domain.undefine()
+                logger.info(f"Undefined VM {vm_name}")
+            except libvirt.libvirtError as e:
+                logger.error(f"Failed to undefine VM {vm_name}: {e}")
+                raise LibvirtError(str(e), "cleanup_vm")
+
+            # Delete disk files
+            for disk_path in disk_paths:
+                try:
+                    SecurityValidator.validate_path(disk_path)
+                    cmd = CommandBuilder.rm_file(disk_path)
+                    await ssh_conn.execute_command(cmd)
+                    logger.info(f"Deleted disk file {disk_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete disk {disk_path}: {e}")
+
+            logger.info(f"Successfully cleaned up VM {vm_name}")
+
+        except libvirt.libvirtError as e:
+            raise LibvirtError(str(e), "cleanup_vm")
+
     def close_all_connections(self) -> None:
         """Close all libvirt connections."""
         for uri, conn in self._connections.items():

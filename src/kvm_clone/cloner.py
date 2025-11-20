@@ -108,6 +108,39 @@ class VMCloner:
                     validation=validation,
                 )
 
+            # Handle idempotent mode - cleanup existing VM before cloning
+            if clone_options.idempotent or clone_options.force:
+                async with self.transport.connect(dest_host) as dest_conn:
+                    if await self.libvirt.vm_exists(dest_conn, new_vm_name):
+                        if clone_options.idempotent:
+                            logger.info(
+                                f"Idempotent mode: Cleaning up existing VM '{new_vm_name}' on {dest_host}",
+                                operation_id=operation_id,
+                                vm_name=new_vm_name,
+                                dest_host=dest_host,
+                            )
+                        else:
+                            logger.info(
+                                f"Force mode: Cleaning up existing VM '{new_vm_name}' on {dest_host}",
+                                operation_id=operation_id,
+                                vm_name=new_vm_name,
+                                dest_host=dest_host,
+                            )
+
+                        try:
+                            await self.libvirt.cleanup_vm(dest_conn, new_vm_name)
+                            logger.info(
+                                f"Successfully cleaned up existing VM '{new_vm_name}'",
+                                operation_id=operation_id,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to cleanup existing VM '{new_vm_name}': {e}",
+                                operation_id=operation_id,
+                                exc_info=True,
+                            )
+                            raise
+
             # Use transaction for atomic operations
             async with CloneTransaction(operation_id, self.transport) as txn:
                 # Get VM information from source
@@ -292,13 +325,18 @@ class VMCloner:
             new_vm_name = clone_options.new_name or f"{vm_name}_clone"
             async with self.transport.connect(dest_host) as dest_conn:
                 if await self.libvirt.vm_exists(dest_conn, new_vm_name):
-                    if not clone_options.force:
-                        errors.append(
-                            f"VM '{new_vm_name}' already exists on destination host {dest_host}"
+                    if clone_options.idempotent:
+                        warnings.append(
+                            f"VM '{new_vm_name}' already exists on destination host {dest_host} "
+                            "(will be automatically cleaned up in idempotent mode)"
                         )
-                    else:
+                    elif clone_options.force:
                         warnings.append(
                             f"VM '{new_vm_name}' will be overwritten on destination host"
+                        )
+                    else:
+                        errors.append(
+                            f"VM '{new_vm_name}' already exists on destination host {dest_host}"
                         )
 
                 # Check destination resources
