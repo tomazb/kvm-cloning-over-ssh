@@ -23,6 +23,32 @@ class StructuredLogger:
         self.logger.addHandler(handler)
 
     class JsonFormatter(logging.Formatter):
+        # Standard LogRecord attributes that should not be included as extra fields
+        STANDARD_ATTRS = {
+            "name",
+            "msg",
+            "args",
+            "created",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "module",
+            "msecs",
+            "message",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "taskName",
+        }
+
         def format(self, record: logging.LogRecord) -> str:
             log_entry: Dict[str, Any] = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -34,26 +60,28 @@ class StructuredLogger:
             if record.exc_info:
                 log_entry["exception"] = self.formatException(record.exc_info)
 
-            # Add extra fields if present
-            if hasattr(record, "extra"):
-                log_entry.update(record.extra)
+            # Add extra fields from the record's __dict__
+            # When extra= is passed to logger, keys are added directly to the LogRecord
+            for key, value in record.__dict__.items():
+                if key not in self.STANDARD_ATTRS:
+                    log_entry[key] = value
 
             return json.dumps(log_entry)
 
     def info(self, message: str, **kwargs: Any) -> None:
-        self.logger.info(message, extra={"extra": kwargs})
+        self.logger.info(message, extra=kwargs)
 
     def error(self, message: str, exc_info: bool = False, **kwargs: Any) -> None:
-        self.logger.error(message, exc_info=exc_info, extra={"extra": kwargs})
+        self.logger.error(message, exc_info=exc_info, extra=kwargs)
 
     def warning(self, message: str, **kwargs: Any) -> None:
-        self.logger.warning(message, extra={"extra": kwargs})
+        self.logger.warning(message, extra=kwargs)
 
     def debug(self, message: str, **kwargs: Any) -> None:
-        self.logger.debug(message, extra={"extra": kwargs})
+        self.logger.debug(message, extra=kwargs)
 
     def critical(self, message: str, exc_info: bool = True, **kwargs: Any) -> None:
-        self.logger.critical(message, exc_info=exc_info, extra={"extra": kwargs})
+        self.logger.critical(message, exc_info=exc_info, extra=kwargs)
 
 
 # Global logger instance

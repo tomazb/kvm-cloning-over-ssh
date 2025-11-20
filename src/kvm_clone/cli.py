@@ -120,7 +120,6 @@ def cli(
 )
 @click.option("--timeout", type=int, default=3600, help="Operation timeout in seconds")
 @click.option("--ssh-key", "-k", help="SSH private key path")
-@click.option("--ssh-port", type=int, default=22, help="SSH port")
 @click.option("--preserve-mac", is_flag=True, help="Preserve MAC addresses")
 @click.option(
     "--network-config",
@@ -141,7 +140,6 @@ def clone(
     verify: bool,
     timeout: int,
     ssh_key: Optional[str],
-    ssh_port: int,
     preserve_mac: bool,
     network_config: Optional[str],
 ) -> None:
@@ -302,19 +300,12 @@ def sync(
     default="all",
     help="Filter by status",
 )
-@click.option(
-    "--format",
-    type=click.Choice(["table", "list", "json"]),
-    default="table",
-    help="Output format",
-)
 @click.option("--ssh-key", "-k", help="SSH private key path")
 @click.pass_context
 def list_vms(
     ctx: Any,
     hosts: tuple[str, ...],
     status: str,
-    format: Optional[str],
     ssh_key: Optional[str],
 ) -> None:
     """List virtual machines on specified hosts."""
@@ -331,10 +322,13 @@ def list_vms(
             if ssh_key:
                 client_config["ssh_key_path"] = ssh_key
 
+            # Get output format from global context
+            output_format = ctx.obj.get("output_format", "text")
+
             async with KVMCloneClient(config=client_config) as client:
                 results = await client.list_vms(hosts_list, status_filter=status)
 
-                if format == "table":
+                if output_format in ("text", "table"):
                     for host, vms in results.items():
                         click.echo(f"\n{host}:")
                         if vms:
@@ -348,7 +342,7 @@ def list_vms(
                                 )
                         else:
                             click.echo("  No VMs found")
-                elif format == "json":
+                elif output_format == "json":
                     import json
 
                     # Convert to JSON-serializable format
@@ -402,13 +396,14 @@ def config_init(config_dir: str) -> None:
 
     config_file = config_path / "config.yaml"
 
+    # Generate config that matches AppConfig schema
     default_config = {
         "ssh_key_path": "~/.ssh/id_rsa",
-        "ssh_port": 22,
-        "parallel_transfers": 4,
-        "verify_transfers": True,
-        "compress_transfers": False,
-        "timeout": 3600,
+        "default_timeout": 30,
+        "log_level": "INFO",
+        "known_hosts_file": None,
+        "default_parallel_transfers": 4,
+        "default_bandwidth_limit": None,
     }
 
     with open(config_file, "w") as f:

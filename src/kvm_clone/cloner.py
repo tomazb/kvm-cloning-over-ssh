@@ -119,9 +119,10 @@ class VMCloner:
                     source_conn, vm_name, new_vm_name, clone_options.preserve_mac
                 )
 
-                # Transfer disk images
+                # Transfer disk images and collect path mappings
                 total_bytes = 0
                 transferred_bytes = 0
+                disk_path_mappings = {}  # old_path -> new_path mapping
 
                 for disk in vm_info.disks:
                     if progress_callback:
@@ -150,9 +151,22 @@ class VMCloner:
                         operation_id,
                     )
 
-                    # Update XML with new disk path
-                    new_xml = new_xml.replace(disk.path, dest_path)
+                    # Store mapping for XML update
+                    disk_path_mappings[disk.path] = dest_path
                     transferred_bytes += disk.size
+
+                # Update XML with new disk paths using ElementTree
+                import xml.etree.ElementTree as ET
+
+                root = ET.fromstring(new_xml)
+                for disk_elem in root.findall(".//disk[@type='file']"):
+                    source_elem = disk_elem.find("source")
+                    if source_elem is not None:
+                        old_path = source_elem.get("file", "")
+                        if old_path in disk_path_mappings:
+                            source_elem.set("file", disk_path_mappings[old_path])
+
+                new_xml = ET.tostring(root, encoding="unicode")
 
                 # Create VM on destination
                 async with self.transport.connect(dest_host) as dest_conn:

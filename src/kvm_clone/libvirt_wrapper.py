@@ -4,6 +4,8 @@ Libvirt API wrapper for KVM operations.
 This module provides a high-level interface to libvirt for VM management operations.
 """
 
+import random
+import uuid
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
@@ -231,8 +233,6 @@ class LibvirtWrapper:
                 name_elem.text = target_vm
 
             # Generate new UUID
-            import uuid
-
             uuid_elem = root.find("uuid")
             if uuid_elem is not None:
                 uuid_elem.text = str(uuid.uuid4())
@@ -241,8 +241,6 @@ class LibvirtWrapper:
             if not preserve_mac:
                 for interface in root.findall(".//interface/mac"):
                     # Generate new MAC address
-                    import random
-
                     mac = "52:54:00:%02x:%02x:%02x" % (
                         random.randint(0, 255),
                         random.randint(0, 255),

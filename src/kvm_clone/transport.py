@@ -165,8 +165,10 @@ class SSHConnection:
             file_size = local_file.stat().st_size
 
             # Transfer file
+            from datetime import datetime
+
             stats = TransferStats()
-            stats.start_time = asyncio.get_event_loop().time()  # type: ignore[assignment]
+            stats.start_time = datetime.now()
 
             def progress_wrapper(transferred: int, total: int) -> None:
                 if progress_callback:
@@ -180,14 +182,14 @@ class SSHConnection:
                 progress_wrapper if progress_callback else None,
             )
 
-            stats.end_time = asyncio.get_event_loop().time()  # type: ignore[assignment]
+            stats.end_time = datetime.now()
             stats.bytes_transferred = file_size
             stats.files_transferred = 1
 
             if stats.end_time and stats.start_time:
-                duration = stats.end_time - stats.start_time
-                if duration > 0:  # type: ignore[operator]
-                    stats.average_speed = file_size / duration  # type: ignore[operator]
+                duration = (stats.end_time - stats.start_time).total_seconds()
+                if duration > 0:
+                    stats.average_speed = file_size / duration
 
             return stats
 
