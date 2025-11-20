@@ -33,14 +33,16 @@ make docs-clean
 
 ```
 docs/
-├── index.md              # Main documentation homepage
-├── api.md                # API reference with mkdocstrings
-├── specs/                # Specifications directory
-│   └── functional_spec.md # Functional specification
-└── README.md             # This file
+├── index.md                     # Main documentation homepage
+├── api.md                       # API reference with mkdocstrings
+├── technical_spec.md            # Technical specification
+├── SECURITY_FIXES_REPORT.md     # Security fixes and improvements
+├── CONTRIBUTING.md              # Contribution guidelines
+├── specs/                       # Specifications directory
+│   └── functional_spec.md       # Functional specification
+└── README.md                    # This file
 
-mkdocs.yml                # MkDocs configuration
-kvm_clone.py              # Example Python module with spec references
+mkdocs.yml                       # MkDocs configuration
 ```
 
 ## Spec ID Linking

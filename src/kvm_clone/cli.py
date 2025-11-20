@@ -9,13 +9,15 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import click
 import yaml
 
 from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
-from kvm_clone.exceptions import KVMCloneError
+from kvm_clone.exceptions import KVMCloneError, ConfigurationError
+from kvm_clone.config import config_loader
+from kvm_clone.logging import logger
 
 
 # Configure logging
@@ -25,7 +27,7 @@ logging.basicConfig(
 )
 
 
-def setup_logging(verbose: bool, quiet: bool, log_level: str) -> None:
+def setup_logging(verbose: bool = False, quiet: bool = False, log_level: str = 'INFO') -> None:
     """Setup logging configuration."""
     if quiet:
         level = logging.ERROR
@@ -37,19 +39,26 @@ def setup_logging(verbose: bool, quiet: bool, log_level: str) -> None:
     logging.getLogger().setLevel(level)
 
 
-def load_config(config_path: str) -> dict:
+def load_config(config_path: Optional[str]) -> dict[str, Any]:
     """Load configuration from file."""
-    config_file = Path(config_path).expanduser()
-    if config_file.exists():
-        try:
-            with open(config_file, 'r') as f:
-                return yaml.safe_load(f) or {}
-        except Exception as e:
-            click.echo(f"Warning: Failed to load config from {config_path}: {e}", err=True)
-    return {}
+    try:
+        app_config = config_loader.load_config(config_path)
+        # Convert back to dict for compatibility with existing code
+        # In a full refactor, we would use AppConfig object directly
+        return {
+            'ssh_key_path': app_config.ssh_key_path,
+            'default_timeout': app_config.default_timeout,
+            'log_level': app_config.log_level,
+            'known_hosts_file': app_config.known_hosts_file,
+            'parallel_transfers': app_config.default_parallel_transfers,
+            'bandwidth_limit': app_config.default_bandwidth_limit
+        }
+    except ConfigurationError as e:
+        click.echo(f"Warning: {e}", err=True)
+        return {}
 
 
-def progress_callback(progress_info):
+def progress_callback(progress_info: Any) -> None:
     """Progress callback for operations."""
     click.echo(f"\rProgress: {progress_info.progress_percent:.1f}% "
               f"({progress_info.bytes_transferred}/{progress_info.total_bytes} bytes) "
@@ -57,7 +66,7 @@ def progress_callback(progress_info):
 
 
 @click.group()
-@click.option('--config', '-c', default='~/.kvm-clone/config.yaml', 
+@click.option('--config', '-c', default=None, 
               help='Configuration file path')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress non-error output')
@@ -67,7 +76,7 @@ def progress_callback(progress_info):
               default='INFO', help='Log level')
 @click.version_option()
 @click.pass_context
-def cli(ctx, config, verbose, quiet, output, log_level):
+def cli(ctx: Any, config: Any, verbose: bool, quiet: bool, output: str, log_level: str) -> None:
     """KVM cloning over SSH tool."""
     setup_logging(verbose, quiet, log_level)
     
@@ -98,12 +107,12 @@ def cli(ctx, config, verbose, quiet, output, log_level):
 @click.option('--preserve-mac', is_flag=True, help='Preserve MAC addresses')
 @click.option('--network-config', type=click.Path(exists=True), help='Custom network configuration file')
 @click.pass_context
-def clone(ctx, source_host, dest_host, vm_name, new_name, force, dry_run, 
-          parallel, compress, verify, timeout, ssh_key, ssh_port, preserve_mac, 
-          network_config):
+def clone(ctx: Any, source_host: str, dest_host: str, vm_name: str, new_name: Optional[str], force: bool, dry_run: bool, 
+          parallel: int, compress: bool, verify: bool, timeout: int, ssh_key: Optional[str], ssh_port: int, preserve_mac: bool, 
+          network_config: Optional[str]) -> None:
     """Clone a virtual machine from source to destination host."""
     
-    async def run_clone():
+    async def run_clone() -> None:
         try:
             # Load network config if provided
             network_cfg = None
@@ -175,11 +184,11 @@ def clone(ctx, source_host, dest_host, vm_name, new_name, force, dry_run,
 @click.option('--ssh-key', '-k', help='SSH private key path')
 @click.option('--timeout', type=int, default=7200, help='Operation timeout in seconds')
 @click.pass_context
-def sync(ctx, source_host, dest_host, vm_name, target_name, checkpoint, 
-         delta_only, bandwidth_limit, ssh_key, timeout):
+def sync(ctx: Any, source_host: str, dest_host: str, vm_name: str, target_name: Optional[str], checkpoint: bool, 
+         delta_only: bool, bandwidth_limit: Optional[str], ssh_key: Optional[str], timeout: int) -> None:
     """Synchronize an existing VM between hosts (incremental transfer)."""
     
-    async def run_sync():
+    async def run_sync() -> None:
         try:
             # Create client
             client_config = ctx.obj['config'].copy()
@@ -235,10 +244,10 @@ def sync(ctx, source_host, dest_host, vm_name, target_name, checkpoint,
               default='table', help='Output format')
 @click.option('--ssh-key', '-k', help='SSH private key path')
 @click.pass_context
-def list_vms(ctx, hosts, status, format, ssh_key):
+def list_vms(ctx: Any, hosts: tuple[str, ...], status: str, format: Optional[str], ssh_key: Optional[str]) -> None:
     """List virtual machines on specified hosts."""
     
-    async def run_list():
+    async def run_list() -> None:
         try:
             if not hosts:
                 hosts_list = ['localhost']
@@ -291,14 +300,14 @@ def list_vms(ctx, hosts, status, format, ssh_key):
 
 
 @cli.group()
-def config():
+def config() -> None:
     """Manage configuration settings."""
     pass
 
 
 @config.command('show')
 @click.pass_context
-def config_show(ctx):
+def config_show(ctx: Any) -> None:
     """Display current configuration."""
     config_data = ctx.obj['config']
     if config_data:
@@ -309,7 +318,7 @@ def config_show(ctx):
 
 @config.command('init')
 @click.option('--config-dir', default='~/.kvm-clone', help='Configuration directory')
-def config_init(config_dir):
+def config_init(config_dir: str) -> None:
     """Initialize default configuration."""
     config_path = Path(config_dir).expanduser()
     config_path.mkdir(parents=True, exist_ok=True)

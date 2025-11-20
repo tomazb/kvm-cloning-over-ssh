@@ -11,10 +11,11 @@ from typing import Optional, Callable
 from datetime import datetime
 
 from .models import SyncOptions, SyncResult, ProgressInfo, DeltaInfo, OperationType, OperationStatusEnum
-from .exceptions import VMNotFoundError, TransferError, ValidationError
+from .exceptions import VMNotFoundError, TransferError, ValidationError, LibvirtError
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
+from .logging import logger
 
 
 class VMSynchronizer:
@@ -24,7 +25,6 @@ class VMSynchronizer:
         """Initialize VM synchronizer."""
         self.transport = transport
         self.libvirt = libvirt_wrapper
-        self.logger = logging.getLogger(__name__)
     
     async def sync(
         self,
@@ -51,7 +51,8 @@ class VMSynchronizer:
         start_time = datetime.now()
         target_vm_name = sync_options.target_name or vm_name
         
-        self.logger.info(f"Starting sync operation {operation_id}: {vm_name} from {source_host} to {dest_host}")
+        logger.info(f"Starting sync operation {operation_id}: {vm_name} from {source_host} to {dest_host}",
+                   operation_id=operation_id, vm_name=vm_name, source_host=source_host, dest_host=dest_host)
         
         try:
             # Validate that both VMs exist
@@ -111,7 +112,8 @@ class VMSynchronizer:
             
             duration = (datetime.now() - start_time).total_seconds()
             
-            self.logger.info(f"Sync operation {operation_id} completed successfully")
+            logger.info(f"Sync operation {operation_id} completed successfully",
+                       operation_id=operation_id, duration=duration)
             
             return SyncResult(
                 operation_id=operation_id,
@@ -126,7 +128,8 @@ class VMSynchronizer:
             
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
-            self.logger.error(f"Sync operation {operation_id} failed: {e}")
+            logger.error(f"Sync operation {operation_id} failed: {e}", 
+                        operation_id=operation_id, exc_info=True)
             
             return SyncResult(
                 operation_id=operation_id,
@@ -201,7 +204,7 @@ class VMSynchronizer:
             )
             
         except Exception as e:
-            self.logger.error(f"Failed to calculate delta: {e}")
+            logger.error(f"Failed to calculate delta: {e}", exc_info=True)
             raise TransferError(str(e), source_host, dest_host)
     
     async def _create_checkpoint(self, host: str, vm_name: str) -> None:
@@ -226,14 +229,14 @@ class VMSynchronizer:
                 stdout, stderr, exit_code = await conn.execute_command(command)
                 
                 if exit_code != 0:
-                    self.logger.warning(f"Failed to create checkpoint: {stderr}")
+                    logger.warning(f"Failed to create checkpoint: {stderr}", host=host, vm_name=vm_name)
                 else:
-                    self.logger.info(f"Created checkpoint {snapshot_name} for {vm_name}")
+                    logger.info(f"Created checkpoint {snapshot_name} for {vm_name}", host=host, vm_name=vm_name)
                     
         except ValidationError as e:
-            self.logger.warning(f"Checkpoint creation failed due to validation error: {e}")
+            logger.warning(f"Checkpoint creation failed due to validation error: {e}", host=host, vm_name=vm_name)
         except Exception as e:
-            self.logger.warning(f"Checkpoint creation failed: {e}")
+            logger.warning(f"Checkpoint creation failed: {e}", host=host, vm_name=vm_name, exc_info=True)
     
     async def _sync_disk(
         self,
@@ -266,7 +269,7 @@ class VMSynchronizer:
             dest_host = SecurityValidator.validate_hostname(dest_host)
             
             # Build secure rsync command
-            additional_options = []
+            additional_options: list[str] = []
             
             # Add bandwidth limit if specified
             if sync_options.bandwidth_limit:

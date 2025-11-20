@@ -8,7 +8,8 @@ functions to prevent common security vulnerabilities.
 import re
 import shlex
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
+import paramiko
 
 from .exceptions import ValidationError
 
@@ -147,7 +148,7 @@ class CommandBuilder:
     """Secure command building utilities."""
     
     @staticmethod
-    def build_safe_command(template: str, **kwargs) -> str:
+    def build_safe_command(template: str, **kwargs: Any) -> str:
         """
         Build a safe shell command with properly quoted parameters.
         
@@ -219,7 +220,7 @@ class CommandBuilder:
         return " ".join(cmd_parts)
     
     @staticmethod
-    def build_virsh_command(action: str, vm_name: str, *args) -> str:
+    def build_virsh_command(action: str, vm_name: str, *args: Any) -> str:
         """
         Build a safe virsh command.
         
@@ -257,7 +258,7 @@ class SSHSecurity:
     """SSH security utilities."""
     
     @staticmethod
-    def get_known_hosts_policy():
+    def get_known_hosts_policy() -> Any:
         """
         Get a secure SSH host key policy.
         

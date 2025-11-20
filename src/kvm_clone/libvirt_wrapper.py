@@ -6,24 +6,31 @@ This module provides a high-level interface to libvirt for VM management operati
 
 import logging
 import xml.etree.ElementTree as ET
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
-import libvirt
+
+if TYPE_CHECKING:
+    import libvirt
+else:
+    try:
+        import libvirt  # type: ignore[import-untyped,import-not-found]
+    except ImportError:
+        libvirt = None  # type: ignore[assignment]
 
 from .models import VMInfo, DiskInfo, NetworkInfo, VMState, ResourceInfo
 from .exceptions import LibvirtError, VMNotFoundError, ConnectionError
 from .transport import SSHConnection
+from .logging import logger
 
 
 class LibvirtWrapper:
     """Wrapper for libvirt operations."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize libvirt wrapper."""
-        self.logger = logging.getLogger(__name__)
-        self._connections: Dict[str, libvirt.virConnect] = {}
+        self._connections: Dict[str, Any] = {}
     
-    async def connect_to_host(self, ssh_conn: SSHConnection) -> libvirt.virConnect:
+    async def connect_to_host(self, ssh_conn: SSHConnection) -> Any:
         """Connect to libvirt on a remote host via SSH."""
         try:
             # Build libvirt URI for SSH connection
@@ -44,12 +51,14 @@ class LibvirtWrapper:
                 raise LibvirtError(f"Failed to connect to libvirt on {ssh_conn.host}", "connection")
             
             self._connections[uri] = conn
-            self.logger.info(f"Connected to libvirt on {ssh_conn.host}")
+            logger.info(f"Connected to libvirt on {ssh_conn.host}", host=ssh_conn.host)
             return conn
             
         except libvirt.libvirtError as e:
+            logger.error(f"Libvirt connection failed on {ssh_conn.host}: {e}", host=ssh_conn.host, exc_info=True)
             raise LibvirtError(str(e), "connection")
         except Exception as e:
+            logger.error(f"Connection error to {ssh_conn.host}: {e}", host=ssh_conn.host, exc_info=True)
             raise ConnectionError(str(e), ssh_conn.host)
     
     async def list_vms(self, ssh_conn: SSHConnection, 
@@ -231,9 +240,11 @@ class LibvirtWrapper:
             if not domain:
                 raise LibvirtError("Failed to define VM", "create_vm")
             
-            self.logger.info(f"VM {domain.name()} created on {ssh_conn.host}")
+            logger.info(f"VM {domain.name()} created on {ssh_conn.host}", 
+                       vm_name=domain.name(), host=ssh_conn.host)
             
         except libvirt.libvirtError as e:
+            logger.error(f"Failed to define VM on {ssh_conn.host}: {e}", host=ssh_conn.host, exc_info=True)
             raise LibvirtError(str(e), "create_vm")
     
     async def get_host_resources(self, ssh_conn: SSHConnection) -> ResourceInfo:
@@ -284,4 +295,4 @@ class LibvirtWrapper:
             except:
                 pass
         self._connections.clear()
-        self.logger.info("All libvirt connections closed")
+        logger.info("All libvirt connections closed")

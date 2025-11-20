@@ -6,14 +6,17 @@ and VM definition creation.
 """
 
 import asyncio
-import logging
 import uuid
 from typing import Optional, Callable
 from datetime import datetime
 from pathlib import Path
 
+from .logging import logger
 from .models import CloneOptions, CloneResult, ProgressInfo, ValidationResult, OperationType, OperationStatusEnum
-from .exceptions import VMNotFoundError, VMExistsError, TransferError, ValidationError
+from .exceptions import (
+    KVMCloneError, VMNotFoundError, VMExistsError, TransferError, 
+    ValidationError, LibvirtError, SSHError
+)
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
@@ -26,7 +29,6 @@ class VMCloner:
         """Initialize VM cloner."""
         self.transport = transport
         self.libvirt = libvirt_wrapper
-        self.logger = logging.getLogger(__name__)
     
     async def clone(
         self,
@@ -53,12 +55,15 @@ class VMCloner:
         start_time = datetime.now()
         new_vm_name = clone_options.new_name or f"{vm_name}_clone"
         
-        self.logger.info(f"Starting clone operation {operation_id}: {vm_name} from {source_host} to {dest_host}")
+        logger.info(f"Starting clone operation {operation_id}: {vm_name} from {source_host} to {dest_host}", 
+                   operation_id=operation_id, vm_name=vm_name, source_host=source_host, dest_host=dest_host)
         
         try:
             # Validate prerequisites
             validation = await self.validate_prerequisites(source_host, dest_host, vm_name, clone_options)
             if not validation.valid:
+                error_msg = f"Validation failed: {'; '.join(validation.errors)}"
+                logger.error(error_msg, operation_id=operation_id, validation_errors=validation.errors)
                 return CloneResult(
                     operation_id=operation_id,
                     success=False,
@@ -68,12 +73,12 @@ class VMCloner:
                     dest_host=dest_host,
                     duration=0.0,
                     bytes_transferred=0,
-                    error=f"Validation failed: {'; '.join(validation.errors)}",
+                    error=error_msg,
                     validation=validation
                 )
             
             if clone_options.dry_run:
-                self.logger.info(f"Dry run completed for {operation_id}")
+                logger.info(f"Dry run completed for {operation_id}", operation_id=operation_id)
                 return CloneResult(
                     operation_id=operation_id,
                     success=True,
@@ -88,7 +93,10 @@ class VMCloner:
             
             # Get VM information from source
             async with self.transport.connect(source_host) as source_conn:
-                vm_info = await self.libvirt.get_vm_info(source_conn, vm_name)
+                try:
+                    vm_info = await self.libvirt.get_vm_info(source_conn, vm_name)
+                except LibvirtError as e:
+                    raise VMNotFoundError(vm_name, source_host) from e
                 
                 # Clone VM definition
                 new_xml = await self.libvirt.clone_vm_definition(
@@ -130,7 +138,8 @@ class VMCloner:
             
             duration = (datetime.now() - start_time).total_seconds()
             
-            self.logger.info(f"Clone operation {operation_id} completed successfully")
+            logger.info(f"Clone operation {operation_id} completed successfully", 
+                       operation_id=operation_id, duration=duration)
             
             return CloneResult(
                 operation_id=operation_id,
@@ -147,7 +156,8 @@ class VMCloner:
             
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
-            self.logger.error(f"Clone operation {operation_id} failed: {e}")
+            logger.error(f"Clone operation {operation_id} failed: {e}", 
+                        operation_id=operation_id, exc_info=True)
             
             return CloneResult(
                 operation_id=operation_id,
@@ -184,7 +194,7 @@ class VMCloner:
         warnings = []
         
         try:
-            # Check source VM exists
+            # Verify source VM exists
             async with self.transport.connect(source_host) as source_conn:
                 if not await self.libvirt.vm_exists(source_conn, vm_name):
                     errors.append(f"VM '{vm_name}' not found on source host {source_host}")

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .models import (
     CloneOptions, SyncOptions, CloneResult, SyncResult, 
-    OperationStatus, VMInfo, ProgressInfo
+    OperationStatus, VMInfo, ProgressInfo, OperationStatusEnum
 )
 from .exceptions import ConfigurationError, ConnectionError
 from .cloner import VMCloner
@@ -230,8 +230,8 @@ class KVMCloneClient:
             True if operation was cancelled, False otherwise
         """
         operation = self._operations.get(operation_id)
-        if operation and operation.status == 'running':
-            operation.status = 'cancelled'
+        if operation and operation.status == OperationStatusEnum.RUNNING:
+            operation.status = OperationStatusEnum.CANCELLED
             return True
         return False
     
@@ -244,7 +244,7 @@ class KVMCloneClient:
         """
         failed_ops = [
             op_id for op_id, op in self._operations.items()
-            if op.status == 'failed'
+            if op.status == OperationStatusEnum.FAILED
         ]
         
         for op_id in failed_ops:
@@ -252,10 +252,10 @@ class KVMCloneClient:
             
         return failed_ops
     
-    async def __aenter__(self):
+    async def __aenter__(self) -> "KVMCloneClient":
         """Async context manager entry."""
         return self
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
         await self.transport.close_all()

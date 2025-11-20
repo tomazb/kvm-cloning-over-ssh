@@ -5,11 +5,12 @@ This module handles SSH connections and secure data transfer between hosts.
 """
 
 import asyncio
-import logging
-from typing import Optional, Dict, Any, AsyncContextManager
+from typing import Optional, Dict, Any, AsyncContextManager, Callable, AsyncIterator
 from pathlib import Path
 import paramiko
 from contextlib import asynccontextmanager
+
+from .logging import logger
 
 from .models import SSHConnectionInfo, TransferStats
 from .exceptions import SSHError, AuthenticationError, ConnectionError, TimeoutError
@@ -29,7 +30,6 @@ class SSHConnection:
         self.timeout = timeout
         self.client: Optional[paramiko.SSHClient] = None
         self.sftp: Optional[paramiko.SFTPClient] = None
-        self.logger = logging.getLogger(__name__)
         
     async def connect(self) -> None:
         """Establish SSH connection."""
@@ -56,18 +56,22 @@ class SSHConnection:
             
             # Connect in executor to avoid blocking
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.client.connect, **connect_kwargs)
+            await loop.run_in_executor(None, lambda: self.client.connect(**connect_kwargs))  # type: ignore[arg-type,union-attr]
             
             # Initialize SFTP
             self.sftp = self.client.open_sftp()
             
-            self.logger.info(f"SSH connection established to {self.host}:{self.port}")
+            logger.info(f"SSH connection established to {self.host}:{self.port}", 
+                       host=self.host, port=self.port)
             
         except paramiko.AuthenticationException as e:
+            logger.error(f"Authentication failed for {self.host}: {e}", host=self.host, exc_info=True)
             raise AuthenticationError(str(e), self.host)
         except paramiko.SSHException as e:
+            logger.error(f"SSH error connecting to {self.host}: {e}", host=self.host, exc_info=True)
             raise SSHError(str(e), self.host, "connection")
         except Exception as e:
+            logger.error(f"Connection error to {self.host}: {e}", host=self.host, exc_info=True)
             raise ConnectionError(str(e), self.host)
     
     async def execute_command(self, command: str, timeout: Optional[int] = None) -> tuple[str, str, int]:
@@ -101,12 +105,14 @@ class SSHConnection:
             )
             
         except asyncio.TimeoutError:
+            logger.error(f"Command execution timed out on {self.host}", host=self.host, command=command, timeout=cmd_timeout)
             raise TimeoutError("Command execution timed out", "command_execution", cmd_timeout)
         except Exception as e:
+            logger.error(f"Command execution failed on {self.host}: {e}", host=self.host, command=command, exc_info=True)
             raise SSHError(str(e), self.host, "command_execution")
     
     async def transfer_file(self, local_path: str, remote_path: str, 
-                          progress_callback: Optional[callable] = None) -> TransferStats:
+                          progress_callback: Optional[Callable[[int, int], None]] = None) -> TransferStats:
         """Transfer a file to the remote host."""
         if not self.sftp:
             raise SSHError("SFTP not available", self.host, "file_transfer")
@@ -123,9 +129,9 @@ class SSHConnection:
             
             # Transfer file
             stats = TransferStats()
-            stats.start_time = asyncio.get_event_loop().time()
+            stats.start_time = asyncio.get_event_loop().time()  # type: ignore[assignment]
             
-            def progress_wrapper(transferred: int, total: int):
+            def progress_wrapper(transferred: int, total: int) -> None:
                 if progress_callback:
                     progress_callback(transferred, total)
             
@@ -137,18 +143,19 @@ class SSHConnection:
                 progress_wrapper if progress_callback else None
             )
             
-            stats.end_time = asyncio.get_event_loop().time()
+            stats.end_time = asyncio.get_event_loop().time()  # type: ignore[assignment]
             stats.bytes_transferred = file_size
             stats.files_transferred = 1
             
             if stats.end_time and stats.start_time:
                 duration = stats.end_time - stats.start_time
-                if duration > 0:
-                    stats.average_speed = file_size / duration
+                if duration > 0:  # type: ignore[operator]
+                    stats.average_speed = file_size / duration  # type: ignore[operator]
             
             return stats
             
         except Exception as e:
+            logger.error(f"File transfer failed to {self.host}: {e}", host=self.host, local_path=local_path, remote_path=remote_path, exc_info=True)
             raise SSHError(str(e), self.host, "file_transfer")
     
     async def close(self) -> None:
@@ -161,7 +168,7 @@ class SSHConnection:
             self.client.close()
             self.client = None
         
-        self.logger.info(f"SSH connection closed to {self.host}")
+        logger.info(f"SSH connection closed to {self.host}", host=self.host)
 
 
 class SSHTransport:
@@ -172,11 +179,10 @@ class SSHTransport:
         self.key_path = key_path
         self.timeout = timeout
         self.connections: Dict[str, SSHConnection] = {}
-        self.logger = logging.getLogger(__name__)
     
     @asynccontextmanager
     async def connect(self, host: str, port: int = 22, 
-                     username: Optional[str] = None) -> AsyncContextManager[SSHConnection]:
+                     username: Optional[str] = None) -> AsyncIterator[SSHConnection]:
         """Create a managed SSH connection."""
         connection_key = f"{host}:{port}"
         
@@ -211,7 +217,7 @@ class SSHTransport:
     
     async def transfer_to_host(self, host: str, local_path: str, remote_path: str,
                              port: int = 22, username: Optional[str] = None,
-                             progress_callback: Optional[callable] = None) -> TransferStats:
+                             progress_callback: Optional[Callable[[int, int], None]] = None) -> TransferStats:
         """Transfer a file to a remote host."""
         async with self.connect(host, port, username) as conn:
             return await conn.transfer_file(local_path, remote_path, progress_callback)
@@ -221,7 +227,7 @@ class SSHTransport:
         for connection in self.connections.values():
             await connection.close()
         self.connections.clear()
-        self.logger.info("All SSH connections closed")
+        logger.info("All SSH connections closed")
     
     def get_connection_info(self, host: str, port: int = 22) -> Optional[SSHConnectionInfo]:
         """Get connection information for a host."""
