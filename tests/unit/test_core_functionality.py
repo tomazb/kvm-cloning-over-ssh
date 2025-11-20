@@ -11,7 +11,7 @@ from tests.conftest import spec
 
 class TestVMConfiguration:
     """Test VM configuration handling."""
-    
+
     @spec("FUNC-1")
     @pytest.mark.unit
     def test_vm_config_validation(self, sample_vm_config):
@@ -19,23 +19,20 @@ class TestVMConfiguration:
         assert sample_vm_config["name"] == "test-vm"
         assert sample_vm_config["memory"] == "2048M"
         assert sample_vm_config["vcpus"] == 2
-    
+
     @spec("FUNC-2")
     @pytest.mark.unit
     def test_clone_options_creation(self):
         """Test clone options creation."""
         options = CloneOptions(
-            new_name="test-clone",
-            force=True,
-            parallel=8,
-            compress=True
+            new_name="test-clone", force=True, parallel=8, compress=True
         )
         assert options.new_name == "test-clone"
         assert options.force is True
         assert options.parallel == 8
         assert options.compress is True
         assert options.verify is True  # Default value
-    
+
     @spec("FUNC-3")
     @pytest.mark.unit
     def test_vm_info_model(self):
@@ -50,7 +47,7 @@ class TestVMConfiguration:
             networks=[],
             host="localhost",
             created=datetime.now(),
-            last_modified=datetime.now()
+            last_modified=datetime.now(),
         )
         assert vm_info.name == "test-vm"
         assert vm_info.state == VMState.RUNNING
@@ -59,37 +56,37 @@ class TestVMConfiguration:
 
 class TestSSHConnection:
     """Test SSH connection management."""
-    
+
     @spec("CONN-1")
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_ssh_connection_setup(self):
         """Test SSH connection initialization."""
         from kvm_clone.transport import SSHConnection
-        
+
         conn = SSHConnection("localhost", port=22, timeout=30)
         assert conn.host == "localhost"
         assert conn.port == 22
         assert conn.timeout == 30
-    
+
     @spec("CONN-2")
     @pytest.mark.unit
     def test_ssh_transport_initialization(self):
         """Test SSH transport initialization."""
         from kvm_clone.transport import SSHTransport
-        
+
         transport = SSHTransport(key_path="~/.ssh/id_rsa", timeout=60)
         assert transport.key_path == "~/.ssh/id_rsa"
         assert transport.timeout == 60
         assert len(transport.connections) == 0
-    
+
     @spec("CONN-3")
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_ssh_connection_cleanup(self):
         """Test SSH connection cleanup."""
         from kvm_clone.transport import SSHTransport
-        
+
         transport = SSHTransport()
         await transport.close_all()
         assert len(transport.connections) == 0
@@ -97,7 +94,7 @@ class TestSSHConnection:
 
 class TestCloningLogic:
     """Test VM cloning logic."""
-    
+
     @spec("CLONE-1")
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -106,49 +103,46 @@ class TestCloningLogic:
         from kvm_clone.cloner import VMCloner
         from kvm_clone.transport import SSHTransport
         from kvm_clone.libvirt_wrapper import LibvirtWrapper
-        
+
         transport = SSHTransport()
         libvirt = LibvirtWrapper()
         cloner = VMCloner(transport, libvirt)
-        
+
         # Mock the validation method
-        with patch.object(cloner, 'validate_prerequisites') as mock_validate:
+        with patch.object(cloner, "validate_prerequisites") as mock_validate:
             mock_validate.return_value = AsyncMock()
             mock_validate.return_value.valid = True
             mock_validate.return_value.errors = []
             mock_validate.return_value.warnings = []
-            
+
             validation = await cloner.validate_prerequisites(
                 "source", "dest", "test-vm", CloneOptions()
             )
-            
+
             assert validation.valid is True
             assert len(validation.errors) == 0
-    
+
     @spec("CLONE-2")
     @pytest.mark.unit
     def test_client_initialization(self):
         """Test KVM clone client initialization."""
-        config = {
-            'ssh_key_path': '~/.ssh/test_key',
-            'timeout': 1800
-        }
-        
+        config = {"ssh_key_path": "~/.ssh/test_key", "timeout": 1800}
+
         client = KVMCloneClient(config=config, timeout=3600)
-        assert client.config['ssh_key_path'] == '~/.ssh/test_key'
+        assert client.config["ssh_key_path"] == "~/.ssh/test_key"
         assert client.timeout == 3600  # Constructor parameter overrides config
-    
+
     @spec("CLONE-3")
     @pytest.mark.unit
     def test_exception_handling(self):
         """Test custom exception creation."""
         from kvm_clone.exceptions import VMNotFoundError, ConfigurationError
-        
+
         vm_error = VMNotFoundError("test-vm", "localhost")
         assert vm_error.vm_name == "test-vm"
         assert vm_error.host == "localhost"
         assert vm_error.error_code == 1003
-        
+
         config_error = ConfigurationError("Invalid config")
         assert config_error.error_code == 1001
         assert "Invalid config" in str(config_error)

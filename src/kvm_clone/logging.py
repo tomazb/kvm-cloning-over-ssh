@@ -4,6 +4,7 @@ import sys
 from typing import Any, Dict
 from datetime import datetime, timezone
 
+
 class StructuredLogger:
     """
     A logger that outputs logs in a structured JSON format.
@@ -12,11 +13,11 @@ class StructuredLogger:
     def __init__(self, name: str, level: int = logging.INFO):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(level)
-        
+
         # Clear existing handlers to avoid duplicate logs
         if self.logger.handlers:
             self.logger.handlers.clear()
-            
+
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(self.JsonFormatter())
         self.logger.addHandler(handler)
@@ -29,10 +30,10 @@ class StructuredLogger:
                 "logger": record.name,
                 "message": record.getMessage(),
             }
-            
+
             if record.exc_info:
                 log_entry["exception"] = self.formatException(record.exc_info)
-            
+
             # Add extra fields if present
             if hasattr(record, "extra"):
                 log_entry.update(record.extra)
@@ -53,6 +54,7 @@ class StructuredLogger:
 
     def critical(self, message: str, exc_info: bool = True, **kwargs: Any) -> None:
         self.logger.critical(message, exc_info=exc_info, extra={"extra": kwargs})
+
 
 # Global logger instance
 logger = StructuredLogger("kvm_clone")

@@ -12,6 +12,7 @@ from enum import Enum
 
 class VMState(Enum):
     """Virtual machine states."""
+
     RUNNING = "running"
     STOPPED = "stopped"
     PAUSED = "paused"
@@ -21,6 +22,7 @@ class VMState(Enum):
 
 class OperationType(Enum):
     """Operation types."""
+
     CLONE = "clone"
     SYNC = "sync"
     LIST = "list"
@@ -28,6 +30,7 @@ class OperationType(Enum):
 
 class OperationStatusEnum(Enum):
     """Operation status values."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -38,6 +41,7 @@ class OperationStatusEnum(Enum):
 @dataclass
 class DiskInfo:
     """Disk information."""
+
     path: str
     size: int  # bytes
     format: str
@@ -48,6 +52,7 @@ class DiskInfo:
 @dataclass
 class NetworkInfo:
     """Network interface information."""
+
     interface: str
     mac_address: str
     network: str
@@ -58,6 +63,7 @@ class NetworkInfo:
 @dataclass
 class VMInfo:
     """Virtual machine information."""
+
     name: str
     uuid: str
     state: VMState
@@ -74,6 +80,7 @@ class VMInfo:
 @dataclass
 class CloneOptions:
     """Options for cloning operations."""
+
     new_name: Optional[str] = None
     force: bool = False
     dry_run: bool = False
@@ -87,6 +94,7 @@ class CloneOptions:
 @dataclass
 class SyncOptions:
     """Options for sync operations."""
+
     target_name: Optional[str] = None
     checkpoint: bool = False
     delta_only: bool = True
@@ -96,6 +104,7 @@ class SyncOptions:
 @dataclass
 class ProgressInfo:
     """Progress information for operations."""
+
     operation_id: str
     operation_type: OperationType
     progress_percent: float
@@ -111,6 +120,7 @@ class ProgressInfo:
 @dataclass
 class ValidationResult:
     """Result of prerequisite validation."""
+
     valid: bool
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
@@ -119,6 +129,7 @@ class ValidationResult:
 @dataclass
 class CloneResult:
     """Result of clone operation."""
+
     operation_id: str
     success: bool
     vm_name: str
@@ -135,6 +146,7 @@ class CloneResult:
 @dataclass
 class SyncResult:
     """Result of sync operation."""
+
     operation_id: str
     success: bool
     vm_name: str
@@ -150,6 +162,7 @@ class SyncResult:
 @dataclass
 class DeltaInfo:
     """Information about differences between VMs."""
+
     total_size: int
     changed_size: int
     changed_blocks: int
@@ -160,6 +173,7 @@ class DeltaInfo:
 @dataclass
 class OperationStatus:
     """Status of an operation."""
+
     operation_id: str
     operation_type: OperationType
     status: OperationStatusEnum
@@ -174,6 +188,7 @@ class OperationStatus:
 @dataclass
 class SSHConnectionInfo:
     """SSH connection information."""
+
     host: str
     port: int = 22
     username: Optional[str] = None
@@ -184,6 +199,7 @@ class SSHConnectionInfo:
 @dataclass
 class TransferStats:
     """Transfer statistics."""
+
     bytes_transferred: int = 0
     files_transferred: int = 0
     start_time: Optional[datetime] = None
@@ -195,6 +211,7 @@ class TransferStats:
 @dataclass
 class ResourceInfo:
     """Host resource information."""
+
     total_memory: int  # MB
     available_memory: int  # MB
     total_disk: int  # bytes
