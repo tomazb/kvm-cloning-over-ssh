@@ -1,29 +1,42 @@
 """Comprehensive unit tests for custom exceptions."""
 
 from kvm_clone.exceptions import (
-    KVMCloneError, ConfigurationError, ConnectionError, VMNotFoundError,
-    VMExistsError, InsufficientResourcesError, TransferError, ValidationError,
-    LibvirtError, SSHError, AuthenticationError, PermissionError,
-    TimeoutError, OperationCancelledError, IntegrityError,
-    DiskSpaceError, MemoryError, NetworkError
+    KVMCloneError,
+    ConfigurationError,
+    ConnectionError,
+    VMNotFoundError,
+    VMExistsError,
+    InsufficientResourcesError,
+    TransferError,
+    ValidationError,
+    LibvirtError,
+    SSHError,
+    AuthenticationError,
+    PermissionError,
+    TimeoutError,
+    OperationCancelledError,
+    IntegrityError,
+    DiskSpaceError,
+    MemoryError,
+    NetworkError,
 )
 
 
 class TestKVMCloneError:
     """Test base KVMCloneError exception."""
-    
+
     def test_base_exception_initialization(self):
         """Test base exception can be created with message and error code."""
         error = KVMCloneError("Test error", error_code=9999)
         assert str(error) == "Test error"
         assert error.message == "Test error"
         assert error.error_code == 9999
-    
+
     def test_base_exception_default_error_code(self):
         """Test base exception has default error code."""
         error = KVMCloneError("Test error")
         assert error.error_code == 1000
-    
+
     def test_base_exception_inheritance(self):
         """Test base exception inherits from Exception."""
         error = KVMCloneError("Test error")
@@ -32,13 +45,13 @@ class TestKVMCloneError:
 
 class TestConfigurationError:
     """Test ConfigurationError exception."""
-    
+
     def test_configuration_error_creation(self):
         """Test ConfigurationError can be created."""
         error = ConfigurationError("Invalid configuration")
         assert "Invalid configuration" in str(error)
         assert error.error_code == 1001
-    
+
     def test_configuration_error_inheritance(self):
         """Test ConfigurationError inherits from KVMCloneError."""
         error = ConfigurationError("Test")
@@ -48,7 +61,7 @@ class TestConfigurationError:
 
 class TestConnectionError:
     """Test ConnectionError exception."""
-    
+
     def test_connection_error_with_host(self):
         """Test ConnectionError includes host information."""
         error = ConnectionError("Connection failed", "192.168.1.100")
@@ -56,7 +69,7 @@ class TestConnectionError:
         assert "Connection failed" in str(error)
         assert error.host == "192.168.1.100"
         assert error.error_code == 1002
-    
+
     def test_connection_error_attributes(self):
         """Test ConnectionError stores host attribute."""
         error = ConnectionError("Timeout", "example.com")
@@ -65,7 +78,7 @@ class TestConnectionError:
 
 class TestVMNotFoundError:
     """Test VMNotFoundError exception."""
-    
+
     def test_vm_not_found_error_creation(self):
         """Test VMNotFoundError includes VM name and host."""
         error = VMNotFoundError("test-vm", "host1")
@@ -74,7 +87,7 @@ class TestVMNotFoundError:
         assert error.vm_name == "test-vm"
         assert error.host == "host1"
         assert error.error_code == 1003
-    
+
     def test_vm_not_found_error_message_format(self):
         """Test VMNotFoundError message is properly formatted."""
         error = VMNotFoundError("my-vm", "server.example.com")
@@ -84,7 +97,7 @@ class TestVMNotFoundError:
 
 class TestVMExistsError:
     """Test VMExistsError exception."""
-    
+
     def test_vm_exists_error_creation(self):
         """Test VMExistsError includes VM name and host."""
         error = VMExistsError("existing-vm", "host2")
@@ -93,7 +106,7 @@ class TestVMExistsError:
         assert error.vm_name == "existing-vm"
         assert error.host == "host2"
         assert error.error_code == 1004
-    
+
     def test_vm_exists_error_message_format(self):
         """Test VMExistsError message is properly formatted."""
         error = VMExistsError("duplicate-vm", "target-host")
@@ -103,7 +116,7 @@ class TestVMExistsError:
 
 class TestInsufficientResourcesError:
     """Test InsufficientResourcesError exception."""
-    
+
     def test_insufficient_resources_error_creation(self):
         """Test InsufficientResourcesError with resource type."""
         error = InsufficientResourcesError("Not enough space", "disk")
@@ -111,7 +124,7 @@ class TestInsufficientResourcesError:
         assert "Not enough space" in str(error)
         assert error.resource_type == "disk"
         assert error.error_code == 1005
-    
+
     def test_insufficient_resources_various_types(self):
         """Test InsufficientResourcesError with various resource types."""
         for resource_type in ["memory", "cpu", "disk", "network"]:
@@ -122,7 +135,7 @@ class TestInsufficientResourcesError:
 
 class TestTransferError:
     """Test TransferError exception."""
-    
+
     def test_transfer_error_creation(self):
         """Test TransferError includes source and destination."""
         error = TransferError("Network failure", "/source/path", "/dest/path")
@@ -132,7 +145,7 @@ class TestTransferError:
         assert error.source == "/source/path"
         assert error.destination == "/dest/path"
         assert error.error_code == 1006
-    
+
     def test_transfer_error_with_hosts(self):
         """Test TransferError with host information."""
         error = TransferError("Timeout", "host1:/path1", "host2:/path2")
@@ -142,20 +155,20 @@ class TestTransferError:
 
 class TestValidationError:
     """Test ValidationError exception."""
-    
+
     def test_validation_error_default_type(self):
         """Test ValidationError with default validation type."""
         error = ValidationError("Invalid input")
         assert "Invalid input" in str(error)
         assert error.validation_type == "general"
         assert error.error_code == 1007
-    
+
     def test_validation_error_custom_type(self):
         """Test ValidationError with custom validation type."""
         error = ValidationError("Invalid VM name", "vm_name")
         assert "vm_name" in str(error)
         assert error.validation_type == "vm_name"
-    
+
     def test_validation_error_various_types(self):
         """Test ValidationError with various validation types."""
         types = ["hostname", "path", "port", "email", "url"]
@@ -166,20 +179,20 @@ class TestValidationError:
 
 class TestLibvirtError:
     """Test LibvirtError exception."""
-    
+
     def test_libvirt_error_default_operation(self):
         """Test LibvirtError with default operation."""
         error = LibvirtError("Connection failed")
         assert "unknown" in str(error)
         assert error.operation == "unknown"
         assert error.error_code == 1008
-    
+
     def test_libvirt_error_custom_operation(self):
         """Test LibvirtError with custom operation."""
         error = LibvirtError("Failed to create domain", "domain_creation")
         assert "domain_creation" in str(error)
         assert error.operation == "domain_creation"
-    
+
     def test_libvirt_error_various_operations(self):
         """Test LibvirtError with various operations."""
         operations = ["connection", "list_vms", "get_vm_info", "clone", "snapshot"]
@@ -190,7 +203,7 @@ class TestLibvirtError:
 
 class TestSSHError:
     """Test SSHError exception."""
-    
+
     def test_ssh_error_default_operation(self):
         """Test SSHError with default operation."""
         error = SSHError("Connection timeout", "host1")
@@ -199,14 +212,14 @@ class TestSSHError:
         assert error.host == "host1"
         assert error.operation == "connection"
         assert error.error_code == 1009
-    
+
     def test_ssh_error_custom_operation(self):
         """Test SSHError with custom operation."""
         error = SSHError("Command failed", "server.com", "command_execution")
         assert error.host == "server.com"
         assert error.operation == "command_execution"
         assert "command_execution" in str(error)
-    
+
     def test_ssh_error_file_transfer_operation(self):
         """Test SSHError for file transfer operations."""
         error = SSHError("Transfer interrupted", "192.168.1.1", "file_transfer")
@@ -216,7 +229,7 @@ class TestSSHError:
 
 class TestAuthenticationError:
     """Test AuthenticationError exception."""
-    
+
     def test_authentication_error_default_method(self):
         """Test AuthenticationError with default auth method."""
         error = AuthenticationError("Auth failed", "host1")
@@ -225,13 +238,13 @@ class TestAuthenticationError:
         assert error.host == "host1"
         assert error.auth_method == "key"
         assert error.error_code == 1010
-    
+
     def test_authentication_error_custom_method(self):
         """Test AuthenticationError with custom auth method."""
         error = AuthenticationError("Invalid password", "server.com", "password")
         assert error.auth_method == "password"
         assert "password" in str(error)
-    
+
     def test_authentication_error_various_methods(self):
         """Test AuthenticationError with various auth methods."""
         methods = ["key", "password", "kerberos", "certificate"]
@@ -242,7 +255,7 @@ class TestAuthenticationError:
 
 class TestPermissionError:
     """Test PermissionError exception."""
-    
+
     def test_permission_error_default_operation(self):
         """Test PermissionError with default operation."""
         error = PermissionError("Denied", "/etc/config")
@@ -251,13 +264,13 @@ class TestPermissionError:
         assert error.resource == "/etc/config"
         assert error.operation == "access"
         assert error.error_code == 1011
-    
+
     def test_permission_error_custom_operation(self):
         """Test PermissionError with custom operation."""
         error = PermissionError("Cannot write", "/var/data", "write")
         assert error.operation == "write"
         assert error.resource == "/var/data"
-    
+
     def test_permission_error_various_operations(self):
         """Test PermissionError with various operations."""
         operations = ["read", "write", "execute", "delete", "create"]
@@ -268,7 +281,7 @@ class TestPermissionError:
 
 class TestTimeoutError:
     """Test TimeoutError exception."""
-    
+
     def test_timeout_error_creation(self):
         """Test TimeoutError includes operation and timeout value."""
         error = TimeoutError("Operation timed out", "clone", 300)
@@ -277,7 +290,7 @@ class TestTimeoutError:
         assert error.operation == "clone"
         assert error.timeout == 300
         assert error.error_code == 1012
-    
+
     def test_timeout_error_various_timeouts(self):
         """Test TimeoutError with various timeout values."""
         for timeout in [30, 60, 300, 3600]:
@@ -288,7 +301,7 @@ class TestTimeoutError:
 
 class TestOperationCancelledError:
     """Test OperationCancelledError exception."""
-    
+
     def test_operation_cancelled_error_creation(self):
         """Test OperationCancelledError includes operation details."""
         error = OperationCancelledError("op-123", "clone")
@@ -297,7 +310,7 @@ class TestOperationCancelledError:
         assert error.operation_id == "op-123"
         assert error.operation_type == "clone"
         assert error.error_code == 1013
-    
+
     def test_operation_cancelled_various_types(self):
         """Test OperationCancelledError with various operation types."""
         for op_type in ["clone", "sync", "backup", "restore"]:
@@ -307,7 +320,7 @@ class TestOperationCancelledError:
 
 class TestIntegrityError:
     """Test IntegrityError exception."""
-    
+
     def test_integrity_error_creation(self):
         """Test IntegrityError includes file path and message."""
         error = IntegrityError("Checksum mismatch", "/path/to/file.img")
@@ -315,7 +328,7 @@ class TestIntegrityError:
         assert "/path/to/file.img" in str(error)
         assert error.file_path == "/path/to/file.img"
         assert error.error_code == 1014
-    
+
     def test_integrity_error_various_messages(self):
         """Test IntegrityError with various integrity issues."""
         messages = ["Checksum failed", "Size mismatch", "Corruption detected"]
@@ -326,7 +339,7 @@ class TestIntegrityError:
 
 class TestDiskSpaceError:
     """Test DiskSpaceError exception."""
-    
+
     def test_disk_space_error_creation(self):
         """Test DiskSpaceError includes space requirements."""
         error = DiskSpaceError(1000000, 500000, "/var/lib/libvirt")
@@ -338,16 +351,16 @@ class TestDiskSpaceError:
         assert error.path == "/var/lib/libvirt"
         assert error.error_code == 1005
         assert error.resource_type == "disk_space"
-    
+
     def test_disk_space_error_inheritance(self):
         """Test DiskSpaceError inherits from InsufficientResourcesError."""
         error = DiskSpaceError(100, 50, "/tmp")
         assert isinstance(error, InsufficientResourcesError)
         assert isinstance(error, KVMCloneError)
-    
+
     def test_disk_space_error_various_sizes(self):
         """Test DiskSpaceError with various size values."""
-        sizes = [(1000, 500), (1024*1024, 512*1024), (0, 0)]
+        sizes = [(1000, 500), (1024 * 1024, 512 * 1024), (0, 0)]
         for required, available in sizes:
             error = DiskSpaceError(required, available, "/path")
             assert error.required == required
@@ -356,7 +369,7 @@ class TestDiskSpaceError:
 
 class TestMemoryError:
     """Test MemoryError exception."""
-    
+
     def test_memory_error_creation(self):
         """Test MemoryError includes memory requirements."""
         error = MemoryError(8192, 4096, "host1")
@@ -368,13 +381,13 @@ class TestMemoryError:
         assert error.host == "host1"
         assert error.error_code == 1005
         assert error.resource_type == "memory"
-    
+
     def test_memory_error_inheritance(self):
         """Test MemoryError inherits from InsufficientResourcesError."""
         error = MemoryError(1024, 512, "server")
         assert isinstance(error, InsufficientResourcesError)
         assert isinstance(error, KVMCloneError)
-    
+
     def test_memory_error_various_amounts(self):
         """Test MemoryError with various memory amounts."""
         amounts = [(2048, 1024), (16384, 8192), (1000, 999)]
@@ -386,7 +399,7 @@ class TestMemoryError:
 
 class TestNetworkError:
     """Test NetworkError exception."""
-    
+
     def test_network_error_default_operation(self):
         """Test NetworkError with default operation."""
         error = NetworkError("Bridge not found", "br0")
@@ -395,13 +408,13 @@ class TestNetworkError:
         assert error.network_name == "br0"
         assert error.operation == "configuration"
         assert error.error_code == 1015
-    
+
     def test_network_error_custom_operation(self):
         """Test NetworkError with custom operation."""
         error = NetworkError("Connection failed", "default", "attach")
         assert error.operation == "attach"
         assert error.network_name == "default"
-    
+
     def test_network_error_various_operations(self):
         """Test NetworkError with various network operations."""
         operations = ["create", "delete", "attach", "detach", "configuration"]
@@ -412,7 +425,7 @@ class TestNetworkError:
 
 class TestExceptionChaining:
     """Test exception chaining and context preservation."""
-    
+
     def test_exception_can_be_raised_from_another(self):
         """Test exceptions can be chained using 'from' keyword."""
         try:
@@ -423,7 +436,7 @@ class TestExceptionChaining:
         except ConfigurationError as error:
             assert error.__cause__ is not None
             assert isinstance(error.__cause__, ValueError)
-    
+
     def test_exception_context_is_preserved(self):
         """Test exception context is preserved in try-except blocks."""
         try:
@@ -438,7 +451,7 @@ class TestExceptionChaining:
 
 class TestExceptionRepresentation:
     """Test exception string representation."""
-    
+
     def test_exception_str_is_informative(self):
         """Test exception string contains useful information."""
         error = TransferError("Network timeout", "host1:/path1", "host2:/path2")
@@ -446,7 +459,7 @@ class TestExceptionRepresentation:
         assert "Network timeout" in error_str
         assert "host1:/path1" in error_str
         assert "host2:/path2" in error_str
-    
+
     def test_exception_repr_includes_class_name(self):
         """Test exception repr includes class name."""
         error = VMNotFoundError("test-vm", "test-host")

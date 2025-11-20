@@ -67,7 +67,8 @@ class SSHConnection:
             # Connect in executor to avoid blocking
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
-                None, lambda: self.client.connect(**connect_kwargs)  # type: ignore[union-attr]
+                None,
+                lambda: self.client.connect(**connect_kwargs),  # type: ignore[union-attr]
             )
 
             # Initialize SFTP
