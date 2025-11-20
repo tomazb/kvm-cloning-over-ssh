@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import paramiko
 
 from kvm_clone.security import SecurityValidator, CommandBuilder, SSHSecurity
@@ -470,7 +470,7 @@ class TestSecurityIntegration:
         """Test complete command building pipeline."""
         # Validate inputs
         vm_name = SecurityValidator.validate_vm_name("test-vm")
-        host = SecurityValidator.validate_hostname("example.com")
+        SecurityValidator.validate_hostname("example.com")
         
         # Build safe command
         cmd = CommandBuilder.build_virsh_command("dominfo", vm_name)
@@ -482,10 +482,10 @@ class TestSecurityIntegration:
         """Test injection prevention works end-to-end."""
         # Try to inject commands
         with pytest.raises(ValidationError):
-            vm_name = SecurityValidator.validate_vm_name("vm; rm -rf /")
+            SecurityValidator.validate_vm_name("vm; rm -rf /")
         
         with pytest.raises(ValidationError):
-            host = SecurityValidator.validate_hostname("host`whoami`")
+            SecurityValidator.validate_hostname("host`whoami`")
         
         # Verify safe command building
         cmd = CommandBuilder.build_safe_command(

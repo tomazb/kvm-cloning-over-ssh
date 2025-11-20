@@ -1,11 +1,9 @@
 """Comprehensive unit tests for structured logging."""
 
-import pytest
 import json
 import logging
 from io import StringIO
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
+from datetime import datetime
 
 from kvm_clone.logging import StructuredLogger, logger
 

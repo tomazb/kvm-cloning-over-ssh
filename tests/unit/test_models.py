@@ -1,8 +1,6 @@
 """Comprehensive unit tests for data models."""
 
-import pytest
 from datetime import datetime
-from dataclasses import FrozenInstanceError
 from kvm_clone.models import (
     VMState, OperationType, OperationStatusEnum,
     DiskInfo, NetworkInfo, VMInfo, CloneOptions, SyncOptions,

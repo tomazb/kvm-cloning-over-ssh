@@ -1,6 +1,5 @@
 """Comprehensive unit tests for custom exceptions."""
 
-import pytest
 from kvm_clone.exceptions import (
     KVMCloneError, ConfigurationError, ConnectionError, VMNotFoundError,
     VMExistsError, InsufficientResourcesError, TransferError, ValidationError,

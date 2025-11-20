@@ -3,9 +3,7 @@
 import pytest
 import tempfile
 import os
-from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
-import yaml
+from unittest.mock import patch, mock_open
 
 from kvm_clone.config import AppConfig, ConfigLoader, config_loader
 from kvm_clone.exceptions import ConfigurationError
