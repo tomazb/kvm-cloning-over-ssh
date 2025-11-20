@@ -308,11 +308,50 @@ class LibvirtWrapper:
             total_memory = mem_stats.get("total", 0) // 1024  # Convert KB to MB
             free_memory = mem_stats.get("free", 0) // 1024
 
+            # Get storage pool information
+            total_disk = 0
+            available_disk = 0
+
+            try:
+                # List all storage pools (active and inactive)
+                pool_names = conn.listStoragePools() + conn.listDefinedStoragePools()
+
+                for pool_name in pool_names:
+                    try:
+                        pool = conn.storagePoolLookupByName(pool_name)
+
+                        # Refresh pool to get current state
+                        if pool.isActive():
+                            pool.refresh(0)
+
+                            # Get pool info
+                            info = pool.info()
+                            # info[1] = capacity in bytes
+                            # info[3] = available space in bytes
+                            total_disk += info[1]
+                            available_disk += info[3]
+
+                            logger.debug(
+                                f"Storage pool {pool_name}: "
+                                f"capacity={info[1]/1e9:.2f}GB, "
+                                f"available={info[3]/1e9:.2f}GB"
+                            )
+                    except libvirt.libvirtError as e:
+                        # Log but don't fail if a single pool is inaccessible
+                        logger.warning(
+                            f"Could not query storage pool {pool_name}: {e}",
+                            pool=pool_name
+                        )
+
+            except libvirt.libvirtError as e:
+                logger.warning(f"Could not list storage pools: {e}")
+                # Don't fail the entire operation, just return 0 for disk info
+
             return ResourceInfo(
                 total_memory=total_memory,
                 available_memory=free_memory,
-                total_disk=0,  # Would need additional calls to get disk info
-                available_disk=0,
+                total_disk=total_disk,
+                available_disk=available_disk,
                 cpu_count=node_info[2],
                 cpu_usage=0.0,  # Would need additional monitoring
             )

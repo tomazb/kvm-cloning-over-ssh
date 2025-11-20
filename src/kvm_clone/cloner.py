@@ -234,6 +234,7 @@ class VMCloner:
         """
         errors = []
         warnings = []
+        vm_info = None  # Store VM info for resource validation
 
         try:
             # Verify source VM exists
@@ -267,8 +268,56 @@ class VMCloner:
 
                 # Check destination resources
                 try:
-                    _resources = await self.libvirt.get_host_resources(dest_conn)
-                    # Add resource validation logic here
+                    resources = await self.libvirt.get_host_resources(dest_conn)
+
+                    # Validate disk space if we have VM info
+                    if vm_info:
+                        # Calculate total disk space required
+                        total_disk_size = sum(disk.size for disk in vm_info.disks)
+
+                        # Add 15% margin for safety (overhead, snapshots, etc.)
+                        required_space = int(total_disk_size * 1.15)
+
+                        if resources.available_disk > 0:  # Only check if we got disk info
+                            if resources.available_disk < required_space:
+                                errors.append(
+                                    f"Insufficient disk space on {dest_host}. "
+                                    f"Required: {required_space / 1e9:.2f} GB "
+                                    f"(including 15% safety margin), "
+                                    f"Available: {resources.available_disk / 1e9:.2f} GB"
+                                )
+                            elif resources.available_disk < required_space * 1.2:
+                                # Warn if less than 20% extra space
+                                warnings.append(
+                                    f"Low disk space on {dest_host}. "
+                                    f"Required: {required_space / 1e9:.2f} GB, "
+                                    f"Available: {resources.available_disk / 1e9:.2f} GB. "
+                                    f"Consider freeing up space for safety."
+                                )
+                        else:
+                            warnings.append(
+                                f"Could not determine available disk space on {dest_host}. "
+                                f"VM requires approximately {total_disk_size / 1e9:.2f} GB."
+                            )
+
+                        # Validate memory
+                        if resources.available_memory > 0:
+                            # Memory requirement in MB
+                            if resources.available_memory < vm_info.memory:
+                                warnings.append(
+                                    f"Low memory on {dest_host}. "
+                                    f"VM requires {vm_info.memory} MB, "
+                                    f"available: {resources.available_memory} MB"
+                                )
+
+                        # Validate CPU
+                        if resources.cpu_count > 0:
+                            if resources.cpu_count < vm_info.vcpus:
+                                warnings.append(
+                                    f"VM requires {vm_info.vcpus} vCPUs, "
+                                    f"but destination has only {resources.cpu_count} CPUs"
+                                )
+
                 except Exception as e:
                     warnings.append(f"Could not check destination resources: {e}")
 
