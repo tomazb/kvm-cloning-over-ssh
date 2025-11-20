@@ -150,7 +150,7 @@ src/kvm_clone/
 
 ## 📖 Documentation
 
-- **[API Specification](api_spec.md)** - Complete API documentation
+- **[API Specification](docs/api_spec.md)** - Complete API documentation
 - **[TODO](TODO.md)** - Current status and roadmap
 
 ### Implementation Guides
