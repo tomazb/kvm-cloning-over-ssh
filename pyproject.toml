@@ -61,6 +61,17 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
 strict_equality = true
+mypy_path = "src"
+packages = ["kvm_clone"]
+exclude = ["tests"]
+
+[[tool.mypy.overrides]]
+module = "libvirt"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytest"
+ignore_missing_imports = true
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

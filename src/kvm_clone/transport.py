@@ -46,8 +46,10 @@ class SSHConnection:
                 SSHSecurity.get_known_hosts_policy()
             )
 
-            # Prepare connection parameters
-            connect_kwargs = {
+            # Prepare connection parameters - type as Any to handle dynamic kwargs
+            from typing import Any
+
+            connect_kwargs: dict[str, Any] = {
                 "hostname": self.host,
                 "port": self.port,
                 "timeout": self.timeout,
@@ -65,8 +67,8 @@ class SSHConnection:
             # Connect in executor to avoid blocking
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
-                None, lambda: self.client.connect(**connect_kwargs)
-            )  # type: ignore[arg-type,union-attr]
+                None, lambda: self.client.connect(**connect_kwargs)  # type: ignore[union-attr]
+            )
 
             # Initialize SFTP
             self.sftp = self.client.open_sftp()
