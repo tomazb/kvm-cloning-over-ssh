@@ -15,6 +15,7 @@ import click
 import yaml
 
 from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
+from kvm_clone.constants import DEFAULT_OPERATION_TIMEOUT
 from kvm_clone.exceptions import KVMCloneError, ConfigurationError
 from kvm_clone.config import config_loader
 
@@ -228,7 +229,12 @@ def clone(
 )
 @click.option("--bandwidth-limit", "-b", help='Bandwidth limit (e.g., "100M", "1G")')
 @click.option("--ssh-key", "-k", help="SSH private key path")
-@click.option("--timeout", type=int, default=7200, help="Operation timeout in seconds")
+@click.option(
+    "--timeout",
+    type=int,
+    default=DEFAULT_OPERATION_TIMEOUT,
+    help="Operation timeout in seconds",
+)
 @click.pass_context
 def sync(
     ctx: Any,
@@ -404,7 +410,7 @@ def config_init(config_dir: str) -> None:
     # Generate config that matches AppConfig schema
     default_config = {
         "ssh_key_path": "~/.ssh/id_rsa",
-        "default_timeout": 30,
+        "default_timeout": DEFAULT_OPERATION_TIMEOUT,
         "log_level": "INFO",
         "known_hosts_file": None,
         "default_parallel_transfers": 4,
