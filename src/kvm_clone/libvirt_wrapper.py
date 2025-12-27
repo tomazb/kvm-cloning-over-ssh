@@ -86,7 +86,7 @@ class LibvirtWrapper:
                         # Connection is stale, close and remove
                         try:
                             conn.close()
-                        except Exception:
+                        except libvirt.libvirtError:
                             pass
                         del self._connections[uri]
                         del self._connection_timestamps[uri]
@@ -426,7 +426,7 @@ class LibvirtWrapper:
                         if len(parts) >= 4:
                             total_disk = int(parts[1])
                             available_disk = int(parts[3])
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 logger.debug(f"Could not get disk space for {ssh_conn.host}: {e}")
 
             return ResourceInfo(
@@ -476,7 +476,7 @@ class LibvirtWrapper:
             conn = self._connections[uri]
             try:
                 conn.close()
-            except Exception as e:
+            except libvirt.libvirtError as e:
                 # Log at debug level - connection close errors are not critical
                 logger.debug(f"Error closing libvirt connection {uri}: {e}")
             del self._connections[uri]
@@ -492,7 +492,7 @@ class LibvirtWrapper:
         for uri, conn in self._connections.items():
             try:
                 conn.close()
-            except Exception as e:
+            except libvirt.libvirtError as e:
                 # Log at debug level - connection close errors are not critical
                 logger.debug(f"Error closing libvirt connection {uri}: {e}")
         self._connections.clear()

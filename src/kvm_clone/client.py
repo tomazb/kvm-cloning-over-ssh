@@ -25,6 +25,7 @@ from .cloner import VMCloner
 from .sync import VMSynchronizer
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
+from .exceptions import KVMCloneError
 
 
 class KVMCloneClient:
@@ -222,7 +223,7 @@ class KVMCloneClient:
                 async with self.transport.connect(host) as conn:
                     vms = await self.libvirt.list_vms(conn, status_filter)
                     return (host, vms)
-            except Exception as e:
+            except (KVMCloneError, OSError) as e:
                 error_msg = f"Failed to list VMs: {str(e)}"
                 self.logger.error(f"{error_msg} on {host}", exc_info=True)
                 return (host, error_msg)
@@ -296,5 +297,5 @@ class KVMCloneClient:
 
             # Also call libvirt's close_all for complete cleanup
             self.libvirt.close_all_connections()
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             self.logger.error(f"Error during cleanup: {e}", exc_info=True)

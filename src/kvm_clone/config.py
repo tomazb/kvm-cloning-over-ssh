@@ -111,7 +111,7 @@ class ConfigLoader:
                 f"Invalid configuration in {path}: {e}", path=path, exc_info=True
             )
             raise ConfigurationError(f"Invalid configuration: {e}") from e
-        except Exception as e:
+        except OSError as e:
             self.logger.error(
                 f"Failed to load configuration from {path}: {e}",
                 path=path,

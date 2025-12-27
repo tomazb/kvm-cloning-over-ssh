@@ -18,7 +18,7 @@ from .models import (
     OperationType,
     OperationStatusEnum,
 )
-from .exceptions import VMNotFoundError, TransferError, ValidationError
+from .exceptions import VMNotFoundError, TransferError, ValidationError, KVMCloneError
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
@@ -185,7 +185,7 @@ class VMSynchronizer:
                 warnings=warnings,
             )
 
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             duration = (datetime.now() - start_time).total_seconds()
             logger.error(
                 f"Sync operation {operation_id} failed: {e}",
@@ -274,7 +274,7 @@ class VMSynchronizer:
                             changed_bytes=disk_changed_size,
                         )
 
-                    except Exception as e:
+                    except (KVMCloneError, OSError) as e:
                         # Fallback: assume full disk needs transfer
                         logger.warning(
                             f"rsync --dry-run failed for {source_disk.path}, assuming full transfer: {e}",
@@ -300,7 +300,7 @@ class VMSynchronizer:
 
         except (VMNotFoundError, TransferError, ValidationError):
             raise
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             logger.error(f"Failed to calculate delta: {e}", exc_info=True)
             raise TransferError(str(e), source_host, dest_host) from e
 

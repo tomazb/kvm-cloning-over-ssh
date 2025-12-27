@@ -227,8 +227,8 @@ def clone(
         except KVMCloneError as e:
             click.echo(f"{ERROR_MARKER} Error: {e}", err=True)
             sys.exit(e.error_code)
-        except Exception as e:
-            click.echo(f"{ERROR_MARKER} Unexpected error: {e}", err=True)
+        except OSError as e:
+            click.echo(f"{ERROR_MARKER} System error: {e}", err=True)
             sys.exit(1)
 
     asyncio.run(run_clone())
@@ -318,8 +318,8 @@ def sync(
         except KVMCloneError as e:
             click.echo(f"{ERROR_MARKER} Error: {e}", err=True)
             sys.exit(e.error_code)
-        except Exception as e:
-            click.echo(f"{ERROR_MARKER} Unexpected error: {e}", err=True)
+        except OSError as e:
+            click.echo(f"{ERROR_MARKER} System error: {e}", err=True)
             sys.exit(1)
 
     asyncio.run(run_sync())
@@ -397,8 +397,8 @@ def list_vms(
         except KVMCloneError as e:
             click.echo(f"{ERROR_MARKER} Error: {e}", err=True)
             sys.exit(e.error_code)
-        except Exception as e:
-            click.echo(f"{ERROR_MARKER} Unexpected error: {e}", err=True)
+        except OSError as e:
+            click.echo(f"{ERROR_MARKER} System error: {e}", err=True)
             sys.exit(1)
 
     asyncio.run(run_list())

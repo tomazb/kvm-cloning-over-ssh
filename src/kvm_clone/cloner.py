@@ -20,7 +20,13 @@ from .models import (
     OperationType,
     OperationStatusEnum,
 )
-from .exceptions import VMNotFoundError, TransferError, ValidationError, LibvirtError
+from .exceptions import (
+    VMNotFoundError,
+    TransferError,
+    ValidationError,
+    LibvirtError,
+    KVMCloneError,
+)
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
@@ -206,7 +212,7 @@ class VMCloner:
                 warnings=validation.warnings,
             )
 
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             duration = (datetime.now() - start_time).total_seconds()
             logger.error(
                 f"Clone operation {operation_id} failed: {e}",
@@ -302,10 +308,10 @@ class VMCloner:
                                 f"available {available_gb:.1f}GB, "
                                 f"required {required_gb:.1f}GB"
                             )
-                except Exception as e:
+                except (KVMCloneError, OSError) as e:
                     warnings.append(f"Could not check destination resources: {e}")
 
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             errors.append(f"Validation error: {e}")
 
         return ValidationResult(
@@ -373,5 +379,5 @@ class VMCloner:
 
         except ValidationError as e:
             raise TransferError(f"Validation error: {e}", source_host, dest_host) from e
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             raise TransferError(str(e), source_host, dest_host) from e

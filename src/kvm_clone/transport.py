@@ -73,7 +73,7 @@ class SSHConnection:
         try:
             transport = self.client.get_transport() if self.client else None
             return transport is not None and transport.is_active()
-        except Exception:
+        except (paramiko.SSHException, OSError):
             return False
 
     async def connect(self) -> None:
@@ -134,7 +134,7 @@ class SSHConnection:
                 exc_info=True,
             )
             raise SSHError(str(e), self.host, "connection") from e
-        except Exception as e:
+        except OSError as e:
             logger.error(
                 f"Connection error to {self.host}: {e}", host=self.host, exc_info=True
             )
@@ -180,7 +180,7 @@ class SSHConnection:
             raise TimeoutError(
                 "Command execution timed out", "command_execution", cmd_timeout
             )
-        except Exception as e:
+        except (paramiko.SSHException, OSError) as e:
             logger.error(
                 f"Command execution failed on {self.host}: {e}",
                 host=self.host,
@@ -240,7 +240,7 @@ class SSHConnection:
 
             return stats
 
-        except Exception as e:
+        except (paramiko.SSHException, OSError) as e:
             logger.error(
                 f"File transfer failed to {self.host}: {e}",
                 host=self.host,
