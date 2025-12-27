@@ -233,7 +233,7 @@ Each task was committed individually with tests run between commits.
 ### 2.4 Dead Code / Unused Variables - ✅ COMPLETED
 
 | File | Lines | Issue | Status |
-|------|-------|---------------------------------------------------------------|
+|------|-------|-----------------------------------------------|--------|
 | `cloner.py` | 123-124 | `total_bytes = 0` never updated | ✅ Fixed |
 | `sync.py` | 93-94 | `total_bytes = 0` never updated | ✅ Fixed |
 
