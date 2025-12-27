@@ -130,14 +130,20 @@ class TestSecurityFixes:
     def test_ssh_security_policy(self):
         """Test SSH security policy is not AutoAddPolicy."""
         import paramiko
-
+        
+        # Reset to get fresh policy
+        SSHSecurity.reset_policy()
         policy = SSHSecurity.get_known_hosts_policy()
 
         # Should not be AutoAddPolicy (which is insecure)
         assert not isinstance(policy, paramiko.AutoAddPolicy)
 
-        # Should be RejectPolicy (secure default)
-        assert isinstance(policy, paramiko.RejectPolicy)
+        # Should be KnownHostsPolicy (secure, reads known_hosts file)
+        # Check by class name to avoid import path issues
+        assert type(policy).__name__ == "KnownHostsPolicy"
+        # Verify it has the expected methods
+        assert hasattr(policy, "missing_host_key")
+        assert hasattr(policy, "add_trusted_host")
 
 
 if __name__ == "__main__":

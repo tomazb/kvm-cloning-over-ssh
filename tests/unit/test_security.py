@@ -369,14 +369,82 @@ class TestCommandBuilderVirshCommand:
         assert "'snap; dangerous'" in cmd
 
 
+class TestKnownHostsPolicy:
+    """Test KnownHostsPolicy class."""
+
+    def test_init_with_defaults(self):
+        """Test KnownHostsPolicy initializes with default known_hosts path."""
+        from kvm_clone.security import KnownHostsPolicy
+        
+        policy = KnownHostsPolicy()
+        assert policy._known_hosts_file.endswith("known_hosts")
+        assert policy._trusted_hosts == set()
+
+    def test_init_with_custom_known_hosts(self):
+        """Test KnownHostsPolicy uses custom known_hosts file."""
+        from kvm_clone.security import KnownHostsPolicy
+        
+        policy = KnownHostsPolicy(known_hosts_file="/custom/known_hosts")
+        assert policy._known_hosts_file == "/custom/known_hosts"
+
+    def test_init_with_trusted_hosts(self):
+        """Test KnownHostsPolicy initializes with trusted hosts."""
+        from kvm_clone.security import KnownHostsPolicy
+        
+        policy = KnownHostsPolicy(trusted_hosts={"host1", "host2"})
+        assert "host1" in policy._trusted_hosts
+        assert "host2" in policy._trusted_hosts
+
+    def test_add_trusted_host(self):
+        """Test adding trusted hosts."""
+        from kvm_clone.security import KnownHostsPolicy
+        
+        policy = KnownHostsPolicy()
+        policy.add_trusted_host("newhost")
+        assert "newhost" in policy._trusted_hosts
+
+    def test_missing_host_key_trusted_host_passes(self):
+        """Test trusted hosts bypass verification."""
+        from kvm_clone.security import KnownHostsPolicy
+        
+        policy = KnownHostsPolicy(trusted_hosts={"trustedhost"})
+        
+        # Mock key - doesn't matter what it is for trusted hosts
+        class MockKey:
+            def get_name(self):
+                return "ssh-rsa"
+        
+        # Should not raise for trusted host
+        policy.missing_host_key(None, "trustedhost", MockKey())
+
+    def test_missing_host_key_unknown_host_rejects(self):
+        """Test unknown hosts are rejected."""
+        from kvm_clone.security import KnownHostsPolicy
+        
+        policy = KnownHostsPolicy(trusted_hosts=set())
+        
+        class MockKey:
+            def get_name(self):
+                return "ssh-rsa"
+        
+        # Should raise for unknown host
+        with pytest.raises(paramiko.SSHException, match="not found in known hosts"):
+            policy.missing_host_key(None, "unknownhost", MockKey())
+
 class TestSSHSecurityPolicy:
     """Test SSHSecurity class."""
 
+    def setup_method(self):
+        """Reset shared policy before each test."""
+        SSHSecurity.reset_policy()
+
     def test_get_known_hosts_policy(self):
         """Test SSH host key policy is secure."""
+        from kvm_clone.security import KnownHostsPolicy
+        
         policy = SSHSecurity.get_known_hosts_policy()
         assert policy is not None
-        assert isinstance(policy, paramiko.RejectPolicy)
+        assert isinstance(policy, KnownHostsPolicy)
         assert not isinstance(policy, paramiko.AutoAddPolicy)
 
     def test_validate_ssh_key_path_valid(self):

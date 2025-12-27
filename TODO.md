@@ -69,8 +69,8 @@ Each task will be committed individually with tests run between commits.
 | 7 | **Fix rsync stats parsing** | `sync.py` | ✅ Done |
 | 8 | **Adopt progress helpers** | `cloner.py`, `sync.py` | ✅ Done |
 | 9 | **Parallelize disk transfers** | `cloner.py`, `sync.py`, `models.py` | ✅ Done |
-| 10 | **Implement resource validation** | `cloner.py` | ⏳ In Progress |
-| 11 | **Implement SSH host key verification** | `security.py`, `transport.py`, `cli.py` | ⏳ Pending |
+| 10 | **Implement resource validation** | `cloner.py` | ✅ Done |
+| 11 | **Implement SSH host key verification** | `security.py`, `transport.py`, `cli.py` | ⏳ In Progress |
 | 12 | **Replace broad exception handlers** | 7 files, 23 instances | ⏳ Pending |
 | 13 | **Standardize type annotations** | All source files | ⏳ Pending |
 

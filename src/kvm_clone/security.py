@@ -269,23 +269,138 @@ class CommandBuilder:
         return " ".join(cmd_parts)
 
 
+class KnownHostsPolicy:
+    """
+    Custom SSH host key policy that reads from known_hosts file.
+    
+    This policy verifies host keys against a known_hosts file (default: ~/.ssh/known_hosts).
+    It also supports session-only trusted hosts that bypass verification.
+    """
+
+    def __init__(
+        self,
+        known_hosts_file: Optional[str] = None,
+        trusted_hosts: Optional[set] = None,
+    ):
+        """
+        Initialize the known hosts policy.
+        
+        Args:
+            known_hosts_file: Path to known_hosts file (default: ~/.ssh/known_hosts)
+            trusted_hosts: Set of hostnames to trust for this session only
+        """
+        import paramiko
+        
+        self._known_hosts_file = known_hosts_file or str(
+            Path.home() / ".ssh" / "known_hosts"
+        )
+        self._trusted_hosts: set = trusted_hosts or set()
+        self._host_keys = paramiko.HostKeys()
+        
+        # Load known hosts file if it exists
+        known_hosts_path = Path(self._known_hosts_file).expanduser()
+        if known_hosts_path.exists():
+            try:
+                self._host_keys.load(str(known_hosts_path))
+            except IOError:
+                # File exists but couldn't be read - continue with empty keys
+                pass
+
+    def missing_host_key(self, client, hostname: str, key) -> None:
+        """
+        Handle missing host key.
+        
+        Args:
+            client: SSHClient instance
+            hostname: Remote hostname
+            key: Host key
+            
+        Raises:
+            paramiko.SSHException: If host key is not trusted
+        """
+        import paramiko
+        
+        # Check if host is in the session trust list
+        if hostname in self._trusted_hosts:
+            return
+        
+        # Check if we have this host in known_hosts
+        # Try both the hostname and potential IP variants
+        if self._host_keys.lookup(hostname):
+            stored_key = self._host_keys.lookup(hostname).get(key.get_name())
+            if stored_key is not None:
+                if stored_key == key:
+                    return
+                else:
+                    raise paramiko.SSHException(
+                        f"Host key mismatch for {hostname}! "
+                        f"This could indicate a man-in-the-middle attack."
+                    )
+        
+        # Host not found - reject by default
+        raise paramiko.SSHException(
+            f"Host '{hostname}' not found in known hosts file "
+            f"({self._known_hosts_file}). Use --trust-host to add it."
+        )
+
+    def add_trusted_host(self, hostname: str) -> None:
+        """Add a host to the session trust list."""
+        self._trusted_hosts.add(hostname)
+
+
 class SSHSecurity:
     """SSH security utilities."""
 
-    @staticmethod
-    def get_known_hosts_policy() -> Any:
+    # Shared policy instance for session-based trust
+    _policy: Optional[KnownHostsPolicy] = None
+
+    @classmethod
+    def get_known_hosts_policy(
+        cls,
+        known_hosts_file: Optional[str] = None,
+        trusted_hosts: Optional[set] = None,
+    ) -> KnownHostsPolicy:
         """
         Get a secure SSH host key policy.
+        
+        Uses a shared policy instance to maintain session-based trusted hosts.
 
+        Args:
+            known_hosts_file: Path to known_hosts file (default: ~/.ssh/known_hosts)
+            trusted_hosts: Set of hostnames to trust for this session only
+            
         Returns:
-            paramiko.MissingHostKeyPolicy: Secure host key policy
+            KnownHostsPolicy: Secure host key policy that reads known_hosts
         """
-        import paramiko
+        if cls._policy is None:
+            cls._policy = KnownHostsPolicy(
+                known_hosts_file=known_hosts_file,
+                trusted_hosts=trusted_hosts,
+            )
+        else:
+            # Add any new trusted hosts to existing policy
+            if trusted_hosts:
+                for host in trusted_hosts:
+                    cls._policy.add_trusted_host(host)
+        return cls._policy
 
-        # Use RejectPolicy by default for security
-        # In production, you might want to implement a custom policy
-        # that checks against a known_hosts file
-        return paramiko.RejectPolicy()
+    @classmethod
+    def add_trusted_host(cls, hostname: str) -> None:
+        """
+        Add a host to the session trust list.
+        
+        Args:
+            hostname: Host to trust for this session
+        """
+        if cls._policy is None:
+            cls._policy = KnownHostsPolicy(trusted_hosts={hostname})
+        else:
+            cls._policy.add_trusted_host(hostname)
+
+    @classmethod
+    def reset_policy(cls) -> None:
+        """Reset the shared policy (useful for testing)."""
+        cls._policy = None
 
     @staticmethod
     def validate_ssh_key_path(key_path: str) -> str:

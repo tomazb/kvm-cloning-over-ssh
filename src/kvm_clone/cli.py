@@ -18,6 +18,7 @@ from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
 from kvm_clone.constants import DEFAULT_OPERATION_TIMEOUT
 from kvm_clone.exceptions import KVMCloneError, ConfigurationError
 from kvm_clone.config import config_loader
+from kvm_clone.security import SSHSecurity
 
 # ASCII markers for terminal compatibility
 SUCCESS_MARKER = "[OK]"
@@ -91,13 +92,28 @@ def progress_callback(progress_info: Any) -> None:
     default="INFO",
     help="Log level",
 )
+@click.option(
+    "--trust-host",
+    multiple=True,
+    help="Trust specified host for this session (can be repeated)",
+)
 @click.version_option()
 @click.pass_context
 def cli(
-    ctx: Any, config: Any, verbose: bool, quiet: bool, output: str, log_level: str
+    ctx: Any,
+    config: Any,
+    verbose: bool,
+    quiet: bool,
+    output: str,
+    log_level: str,
+    trust_host: tuple,
 ) -> None:
     """KVM cloning over SSH tool."""
     setup_logging(verbose, quiet, log_level)
+    
+    # Add trusted hosts to SSH security policy
+    for host in trust_host:
+        SSHSecurity.add_trusted_host(host)
 
     # Load configuration
     config_data = load_config(config)
