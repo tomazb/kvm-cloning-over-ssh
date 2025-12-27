@@ -7,6 +7,7 @@ This module handles VM synchronization (incremental updates) between hosts.
 from __future__ import annotations
 
 import asyncio
+import re
 import shlex
 import uuid
 from collections.abc import Callable
@@ -306,38 +307,79 @@ class VMSynchronizer:
             logger.error(f"Failed to calculate delta: {e}", exc_info=True)
             raise TransferError(str(e), source_host, dest_host) from e
 
+    # Regex patterns for rsync --stats output parsing
+    # Expected format examples:
+    #   "Total file size: 1,234,567 bytes"
+    #   "Total transferred file size: 123,456 bytes"
+    _TOTAL_SIZE_PATTERN = re.compile(
+        r"Total file size:\s*([\d,]+)\s*bytes?", re.IGNORECASE
+    )
+    _TRANSFERRED_SIZE_PATTERN = re.compile(
+        r"Total transferred file size:\s*([\d,]+)\s*bytes?", re.IGNORECASE
+    )
+    # Pattern for "sent X bytes  received Y bytes" line
+    _SENT_BYTES_PATTERN = re.compile(
+        r"sent\s+([\d,]+)\s+bytes?\s+received\s+([\d,]+)\s+bytes?", re.IGNORECASE
+    )
+
     def _parse_rsync_stats(self, rsync_output: str) -> dict[str, int]:
         """Parse rsync --stats output to extract transfer information.
+
+        Uses regex patterns for robust parsing of rsync's --stats output.
+        Logs debug messages when expected patterns are not found.
+
+        Expected rsync --stats output format:
+            Number of files: 1
+            Total file size: 1,234,567 bytes
+            Total transferred file size: 123,456 bytes
+            ...
 
         Args:
             rsync_output: Output from rsync --stats command
 
         Returns:
-            Dict with 'total_size' and 'transferred_size' keys
+            Dict with 'total_size' and 'transferred_size' keys.
+            Values are 0 if parsing fails.
         """
         stats = {
             "total_size": 0,
             "transferred_size": 0,
         }
 
-        for line in rsync_output.split('\n'):
-            line = line.strip()
+        if not rsync_output:
+            logger.debug("rsync stats parsing: empty output received")
+            return stats
 
-            # Match: "Total file size: 1,234,567 bytes"
-            if line.startswith("Total file size:"):
-                size_str = line.split(":")[1].strip().split()[0].replace(",", "")
-                try:
-                    stats["total_size"] = int(size_str)
-                except ValueError:
-                    pass
+        # Match total file size
+        total_match = self._TOTAL_SIZE_PATTERN.search(rsync_output)
+        if total_match:
+            try:
+                stats["total_size"] = int(total_match.group(1).replace(",", ""))
+            except ValueError as e:
+                logger.debug(
+                    f"rsync stats parsing: failed to parse total_size '{total_match.group(1)}': {e}"
+                )
+        else:
+            logger.debug(
+                "rsync stats parsing: 'Total file size' pattern not found in output"
+            )
 
-            # Match: "Total transferred file size: 123,456 bytes"
-            elif line.startswith("Total transferred file size:"):
-                size_str = line.split(":")[1].strip().split()[0].replace(",", "")
-                try:
-                    stats["transferred_size"] = int(size_str)
-                except ValueError:
-                    pass
+        # Match transferred file size
+        transferred_match = self._TRANSFERRED_SIZE_PATTERN.search(rsync_output)
+        if transferred_match:
+            try:
+                stats["transferred_size"] = int(
+                    transferred_match.group(1).replace(",", "")
+                )
+            except ValueError as e:
+                logger.debug(
+                    f"rsync stats parsing: failed to parse transferred_size "
+                    f"'{transferred_match.group(1)}': {e}"
+                )
+        else:
+            logger.debug(
+                "rsync stats parsing: 'Total transferred file size' pattern not found"
+            )
 
         return stats
 
@@ -469,42 +511,67 @@ class VMSynchronizer:
     def _parse_rsync_transfer_stats(self, rsync_output: str) -> dict[str, int]:
         """Parse rsync verbose output for transfer statistics.
 
+        Uses regex patterns for robust parsing. Tries multiple patterns
+        to handle different rsync output formats.
+
+        Expected rsync output formats:
+            1. Summary line: "sent 123,456 bytes  received 789 bytes  ..."
+            2. Stats output: "Total transferred file size: 123,456 bytes"
+
         Args:
             rsync_output: Output from rsync command with --verbose or --stats
 
         Returns:
-            Dict with 'bytes_transferred' and 'blocks_synchronized' keys
+            Dict with 'bytes_transferred' and 'blocks_synchronized' keys.
+            Values are 0 if parsing fails.
         """
         stats = {
             "bytes_transferred": 0,
             "blocks_synchronized": 0,
         }
 
-        for line in rsync_output.split('\n'):
-            line = line.strip()
+        if not rsync_output:
+            logger.debug("rsync transfer stats parsing: empty output received")
+            return stats
 
-            # Match: "sent X bytes  received Y bytes"
-            if "sent " in line and " bytes" in line:
-                parts = line.split()
-                for i, part in enumerate(parts):
-                    if part == "sent" and i + 1 < len(parts):
-                        sent_str = parts[i + 1].replace(",", "")
-                        try:
-                            stats["bytes_transferred"] = int(sent_str)
-                        except ValueError:
-                            pass
-                        break
+        bytes_found = False
 
-            # Alternative: look for "Total transferred file size: X bytes"
-            if "Total transferred file size:" in line:
-                size_str = line.split(":")[1].strip().split()[0].replace(",", "")
+        # Try "sent X bytes received Y bytes" pattern first (more common)
+        sent_match = self._SENT_BYTES_PATTERN.search(rsync_output)
+        if sent_match:
+            try:
+                stats["bytes_transferred"] = int(sent_match.group(1).replace(",", ""))
+                bytes_found = True
+            except ValueError as e:
+                logger.debug(
+                    f"rsync transfer stats: failed to parse sent bytes "
+                    f"'{sent_match.group(1)}': {e}"
+                )
+
+        # Fallback: try "Total transferred file size" pattern
+        if not bytes_found:
+            transferred_match = self._TRANSFERRED_SIZE_PATTERN.search(rsync_output)
+            if transferred_match:
                 try:
-                    stats["bytes_transferred"] = int(size_str)
-                except (ValueError, IndexError):
-                    pass
+                    stats["bytes_transferred"] = int(
+                        transferred_match.group(1).replace(",", "")
+                    )
+                    bytes_found = True
+                except ValueError as e:
+                    logger.debug(
+                        f"rsync transfer stats: failed to parse transferred size "
+                        f"'{transferred_match.group(1)}': {e}"
+                    )
+
+        if not bytes_found:
+            logger.debug(
+                "rsync transfer stats: no recognized byte count pattern found in output"
+            )
 
         # Calculate blocks synchronized from bytes
         if stats["bytes_transferred"] > 0:
-            stats["blocks_synchronized"] = stats["bytes_transferred"] // DEFAULT_BLOCK_SIZE
+            stats["blocks_synchronized"] = (
+                stats["bytes_transferred"] // DEFAULT_BLOCK_SIZE
+            )
 
         return stats
