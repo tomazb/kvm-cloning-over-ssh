@@ -235,6 +235,11 @@ def clone(
     default=DEFAULT_OPERATION_TIMEOUT,
     help="Operation timeout in seconds",
 )
+@click.option(
+    "--allow-disk-mismatch",
+    is_flag=True,
+    help="Allow sync even if disk counts don't match (may lose data)",
+)
 @click.pass_context
 def sync(
     ctx: Any,
@@ -247,6 +252,7 @@ def sync(
     bandwidth_limit: Optional[str],
     ssh_key: Optional[str],
     timeout: int,
+    allow_disk_mismatch: bool,
 ) -> None:
     """Synchronize an existing VM between hosts (incremental transfer)."""
 
@@ -263,6 +269,7 @@ def sync(
                     checkpoint=checkpoint,
                     delta_only=delta_only,
                     bandwidth_limit=bandwidth_limit,
+                    allow_disk_mismatch=allow_disk_mismatch,
                 )
 
                 if not ctx.obj["quiet"]:

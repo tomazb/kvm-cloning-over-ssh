@@ -156,6 +156,7 @@ class KVMCloneClient:
         checkpoint: bool = False,
         delta_only: bool = True,
         bandwidth_limit: Optional[str] = None,
+        allow_disk_mismatch: bool = False,
         progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
     ) -> SyncResult:
         """
@@ -169,6 +170,7 @@ class KVMCloneClient:
             checkpoint: Create checkpoint before sync
             delta_only: Transfer only changed blocks
             bandwidth_limit: Bandwidth limit (e.g., '100M', '1G')
+            allow_disk_mismatch: Allow sync even if disk counts don't match
             progress_callback: Callback for progress updates
 
         Returns:
@@ -179,6 +181,7 @@ class KVMCloneClient:
             checkpoint=checkpoint,
             delta_only=delta_only,
             bandwidth_limit=bandwidth_limit,
+            allow_disk_mismatch=allow_disk_mismatch,
         )
 
         result = await self.synchronizer.sync(
