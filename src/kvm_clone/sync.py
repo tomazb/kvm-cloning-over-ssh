@@ -405,8 +405,8 @@ class VMSynchronizer:
             source_host = SecurityValidator.validate_hostname(source_host)
             dest_host = SecurityValidator.validate_hostname(dest_host)
 
-            # Build secure rsync command
-            additional_options: list[str] = []
+            # Build secure rsync command with --stats for transfer statistics
+            additional_options: list[str] = ["--stats"]
 
             # Add bandwidth limit if specified
             if sync_options.bandwidth_limit:
