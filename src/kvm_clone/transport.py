@@ -5,12 +5,16 @@ This module handles SSH connections and secure data transfer between hosts.
 """
 
 import asyncio
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Callable, AsyncIterator
 from pathlib import Path
+from datetime import datetime
 import paramiko
 from contextlib import asynccontextmanager
 
 from .logging import logger
+from .constants import DEFAULT_CONNECTION_TTL, DEFAULT_MAX_CONNECTIONS
 
 from .models import SSHConnectionInfo, TransferStats
 from .exceptions import SSHError, AuthenticationError, ConnectionError, TimeoutError
@@ -27,6 +31,7 @@ class SSHConnection:
         username: Optional[str] = None,
         key_path: Optional[str] = None,
         timeout: int = 30,
+        executor: Optional[ThreadPoolExecutor] = None,
     ):
         """Initialize SSH connection."""
         self.host = host
@@ -34,8 +39,42 @@ class SSHConnection:
         self.username = username
         self.key_path = key_path
         self.timeout = timeout
+        self._executor = executor
         self.client: Optional[paramiko.SSHClient] = None
         self.sftp: Optional[paramiko.SFTPClient] = None
+        self._created_at: float = asyncio.get_event_loop().time()
+        self._last_used: float = self._created_at
+
+    def is_stale(self, ttl_seconds: int = DEFAULT_CONNECTION_TTL) -> bool:
+        """Check if connection is stale (not used recently).
+
+        Args:
+            ttl_seconds: Time-to-live in seconds
+
+        Returns:
+            True if connection is stale
+        """
+        current_time = asyncio.get_event_loop().time()
+        return (current_time - self._last_used) > ttl_seconds
+
+    def mark_used(self) -> None:
+        """Mark connection as recently used."""
+        self._last_used = asyncio.get_event_loop().time()
+
+    async def is_alive(self) -> bool:
+        """Check if SSH connection is still alive.
+
+        Returns:
+            True if connection is alive
+        """
+        if not self.client:
+            return False
+
+        try:
+            transport = self.client.get_transport() if self.client else None
+            return transport is not None and transport.is_active()
+        except Exception:
+            return False
 
     async def connect(self) -> None:
         """Establish SSH connection."""
@@ -66,8 +105,9 @@ class SSHConnection:
 
             # Connect in executor to avoid blocking
             loop = asyncio.get_event_loop()
+            executor = self._executor or None
             await loop.run_in_executor(
-                None,
+                executor,
                 lambda: self.client.connect(**connect_kwargs),  # type: ignore[union-attr]
             )
 
@@ -109,22 +149,23 @@ class SSHConnection:
 
         try:
             loop = asyncio.get_event_loop()
+            executor = self._executor or None
             stdin, stdout, stderr = await loop.run_in_executor(
-                None, self.client.exec_command, command
+                executor, self.client.exec_command, command
             )
 
             # Wait for command completion with timeout
             cmd_timeout = timeout or self.timeout
             stdout_data = await asyncio.wait_for(
-                loop.run_in_executor(None, stdout.read), timeout=cmd_timeout
+                loop.run_in_executor(executor, stdout.read), timeout=cmd_timeout
             )
             stderr_data = await asyncio.wait_for(
-                loop.run_in_executor(None, stderr.read), timeout=cmd_timeout
+                loop.run_in_executor(executor, stderr.read), timeout=cmd_timeout
             )
 
             # Retrieve exit status without blocking event loop
             exit_code = await loop.run_in_executor(
-                None, stdout.channel.recv_exit_status
+                executor, stdout.channel.recv_exit_status
             )
 
             return (stdout_data.decode("utf-8"), stderr_data.decode("utf-8"), exit_code)
@@ -181,7 +222,7 @@ class SSHConnection:
                     progress_callback(transferred, total)
 
             await loop.run_in_executor(
-                None,
+                self._executor or None,
                 self.sftp.put,
                 local_path,
                 remote_path,
@@ -225,11 +266,30 @@ class SSHConnection:
 class SSHTransport:
     """SSH transport manager for multiple connections."""
 
-    def __init__(self, key_path: Optional[str] = None, timeout: int = 30):
-        """Initialize SSH transport."""
+    def __init__(
+        self,
+        key_path: Optional[str] = None,
+        timeout: int = 30,
+        connection_ttl: int = DEFAULT_CONNECTION_TTL,
+        max_connections: int = DEFAULT_MAX_CONNECTIONS,
+        max_workers: int = 10,
+    ):
+        """Initialize SSH transport.
+
+        Args:
+            key_path: Default SSH key path
+            timeout: Default connection timeout in seconds
+            connection_ttl: Connection time-to-live in seconds (default: 5 minutes)
+            max_connections: Maximum number of cached connections
+            max_workers: Maximum number of thread pool workers
+        """
         self.key_path = key_path
         self.timeout = timeout
-        self.connections: Dict[str, SSHConnection] = {}
+        self.connection_ttl = connection_ttl
+        self.max_connections = max_connections
+        self.max_workers = max_workers
+        self.connections: OrderedDict[str, SSHConnection] = OrderedDict()
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
     @asynccontextmanager
     async def connect(
@@ -238,10 +298,25 @@ class SSHTransport:
         """Create a managed SSH connection."""
         connection_key = f"{host}:{port}"
 
-        # Reuse existing connection if available
+        # Reuse existing connection if available and alive
         if connection_key in self.connections:
-            yield self.connections[connection_key]
-            return
+            conn = self.connections[connection_key]
+
+            # Check if connection is still alive and not stale
+            if await conn.is_alive() and not conn.is_stale(self.connection_ttl):
+                conn.mark_used()
+                # Move to end (most recently used)
+                self.connections.move_to_end(connection_key)
+                yield conn
+                return
+            else:
+                # Close stale/dead connection
+                await conn.close()
+                del self.connections[connection_key]
+
+        # Enforce max connection limit with LRU eviction
+        if len(self.connections) >= self.max_connections:
+            await self._evict_lru_connection()
 
         # Create new connection
         connection = SSHConnection(
@@ -250,15 +325,48 @@ class SSHTransport:
             username=username,
             key_path=self.key_path,
             timeout=self.timeout,
+            executor=self._executor,
         )
 
         try:
             await connection.connect()
             self.connections[connection_key] = connection
+            connection.mark_used()
             yield connection
         finally:
-            # Keep connection for reuse
+            # Keep connection for reuse (managed by TTL)
             pass
+
+    async def _evict_lru_connection(self) -> None:
+        """Evict least recently used connection."""
+        if not self.connections:
+            return
+
+        # First connection is LRU (OrderedDict maintains insertion order)
+        lru_key, lru_conn = self.connections.popitem(last=False)
+        await lru_conn.close()
+        logger.info(f"Evicted LRU connection: {lru_key}")
+
+    async def cleanup_stale_connections(self) -> int:
+        """Clean up all stale connections.
+
+        Returns:
+            int: Number of closed connections
+        """
+        stale_keys = []
+
+        for key, conn in self.connections.items():
+            if conn.is_stale(self.connection_ttl) or not await conn.is_alive():
+                stale_keys.append(key)
+
+        for key in stale_keys:
+            conn = self.connections.pop(key)
+            await conn.close()
+
+        if stale_keys:
+            logger.info(f"Cleaned up {len(stale_keys)} stale SSH connections")
+
+        return len(stale_keys)
 
     async def execute_on_host(
         self,
@@ -286,10 +394,11 @@ class SSHTransport:
             return await conn.transfer_file(local_path, remote_path, progress_callback)
 
     async def close_all(self) -> None:
-        """Close all SSH connections."""
+        """Close all SSH connections and cleanup executor."""
         for connection in self.connections.values():
             await connection.close()
         self.connections.clear()
+        self._executor.shutdown(wait=True)
         logger.info("All SSH connections closed")
 
     def get_connection_info(

@@ -9,6 +9,8 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
+from .constants import DEFAULT_PARALLEL_TRANSFERS
+
 
 class VMState(Enum):
     """Virtual machine states."""
@@ -84,7 +86,7 @@ class CloneOptions:
     new_name: Optional[str] = None
     force: bool = False
     dry_run: bool = False
-    parallel: int = 4
+    parallel: int = DEFAULT_PARALLEL_TRANSFERS
     compress: bool = False
     verify: bool = True
     preserve_mac: bool = False
@@ -99,6 +101,7 @@ class SyncOptions:
     checkpoint: bool = False
     delta_only: bool = True
     bandwidth_limit: Optional[str] = None
+    allow_disk_mismatch: bool = False  # Allow sync despite disk count mismatch
 
 
 @dataclass

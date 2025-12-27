@@ -5,8 +5,9 @@ This module implements the primary interface for KVM virtual machine cloning
 and synchronization operations over SSH connections.
 """
 
+import asyncio
 import logging
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List, Callable, Union
 
 from .models import (
     CloneOptions,
@@ -200,28 +201,35 @@ class KVMCloneClient:
 
     async def list_vms(
         self, hosts: List[str], *, status_filter: Optional[str] = None
-    ) -> Dict[str, List[VMInfo]]:
+    ) -> Dict[str, Union[List[VMInfo], str]]:
         """
         List virtual machines on specified hosts.
+        Queries all hosts concurrently for better performance.
 
         Args:
             hosts: List of hosts to query
             status_filter: Filter by status ('all', 'running', 'stopped', 'paused')
 
         Returns:
-            Dict mapping host names to lists of VM information
+            Dict mapping host names to either lists of VM information or error strings
         """
-        results = {}
-
-        for host in hosts:
+        async def query_host(host: str) -> tuple[str, Union[List[VMInfo], str]]:
+            """Query a single host and return result."""
             try:
                 async with self.transport.connect(host) as conn:
                     vms = await self.libvirt.list_vms(conn, status_filter)
-                    results[host] = vms
+                    return (host, vms)
             except Exception as e:
-                self.logger.error(f"Failed to list VMs on {host}: {e}")
-                results[host] = []
+                error_msg = f"Failed to list VMs: {str(e)}"
+                self.logger.error(f"{error_msg} on {host}", exc_info=True)
+                return (host, error_msg)
 
+        # Query all hosts concurrently
+        tasks = [query_host(host) for host in hosts]
+        results_list = await asyncio.gather(*tasks)
+
+        # Convert list of tuples to dict
+        results = dict(results_list)
         return results
 
     def get_operation_status(self, operation_id: str) -> Optional[OperationStatus]:
@@ -275,5 +283,15 @@ class KVMCloneClient:
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Async context manager exit."""
-        await self.transport.close_all()
+        """Async context manager exit - cleanup all connections."""
+        try:
+            # Close all SSH connections
+            await self.transport.close_all()
+
+            # Close all libvirt connections
+            await self.libvirt.cleanup_stale_connections()
+
+            # Also call libvirt's close_all for complete cleanup
+            self.libvirt.close_all_connections()
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}", exc_info=True)

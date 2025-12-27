@@ -16,7 +16,7 @@ class TestAppConfig:
         """Test AppConfig default values."""
         config = AppConfig()
         assert config.ssh_key_path is None
-        assert config.default_timeout == 30
+        assert config.default_timeout == 3600  # DEFAULT_OPERATION_TIMEOUT
         assert config.log_level == "INFO"
         assert config.known_hosts_file is None
         assert config.default_parallel_transfers == 4
@@ -135,7 +135,7 @@ class TestConfigLoader:
         with patch("os.path.exists", return_value=False):
             config = loader.load_config()
             assert isinstance(config, AppConfig)
-            assert config.default_timeout == 30
+            assert config.default_timeout == 3600  # DEFAULT_OPERATION_TIMEOUT
             assert config.log_level == "INFO"
 
     def test_load_config_from_specified_path(self):
@@ -187,7 +187,7 @@ log_level: ERROR
             loader = ConfigLoader()
             config = loader.load_config(temp_path)
             # Should return defaults
-            assert config.default_timeout == 30
+            assert config.default_timeout == 3600  # DEFAULT_OPERATION_TIMEOUT
             assert config.log_level == "INFO"
         finally:
             os.unlink(temp_path)
@@ -335,7 +335,7 @@ class TestConfigIntegration:
             loader = ConfigLoader()
             config = loader.load_config(temp_path)
             assert config.log_level == "INFO"
-            assert config.default_timeout == 30  # Default
+            assert config.default_timeout == 3600  # DEFAULT_OPERATION_TIMEOUT
         finally:
             os.unlink(temp_path)
 

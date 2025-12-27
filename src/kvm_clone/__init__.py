@@ -25,6 +25,7 @@ from .exceptions import (
     ValidationError,
 )
 from .security import SecurityValidator, CommandBuilder, SSHSecurity
+from .progress import create_progress_info, create_disk_progress_info
 
 __all__ = [
     "__version__",
@@ -48,4 +49,6 @@ __all__ = [
     "SecurityValidator",
     "CommandBuilder",
     "SSHSecurity",
+    "create_progress_info",
+    "create_disk_progress_info",
 ]

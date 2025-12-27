@@ -4,8 +4,9 @@ VM synchronization operations.
 This module handles VM synchronization (incremental updates) between hosts.
 """
 
+import shlex
 import uuid
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 from datetime import datetime
 
 from .models import (
@@ -21,6 +22,7 @@ from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
 from .logging import logger
+from .constants import DEFAULT_BLOCK_SIZE, DEFAULT_NETWORK_SPEED_BYTES
 
 
 class VMSynchronizer:
@@ -89,36 +91,47 @@ class VMSynchronizer:
             if sync_options.checkpoint:
                 await self._create_checkpoint(dest_host, target_vm_name)
 
+            # Validate disk counts BEFORE starting sync
+            if len(source_vm_info.disks) != len(dest_vm_info.disks):
+                if not sync_options.allow_disk_mismatch:
+                    raise ValidationError(
+                        f"Disk count mismatch: source has {len(source_vm_info.disks)} disks, "
+                        f"destination has {len(dest_vm_info.disks)} disks. "
+                        f"Use --allow-disk-mismatch to force sync (may lose data)."
+                    )
+                else:
+                    logger.warning(
+                        "Disk count mismatch - synchronizing subset only. Data loss may occur.",
+                        source_disks=len(source_vm_info.disks),
+                        dest_disks=len(dest_vm_info.disks),
+                        operation_id=operation_id,
+                    )
+
             # Perform synchronization
-            total_bytes = 0
+            # Calculate total bytes for progress tracking
+            total_bytes = sum(disk.size for disk in source_vm_info.disks)
             transferred_bytes = 0
             blocks_synchronized = 0
-
-            # Warn if disk counts differ
-            if len(source_vm_info.disks) != len(dest_vm_info.disks):
-                logger.warning(
-                    "Source/destination disk count mismatch",
-                    source_disks=len(source_vm_info.disks),
-                    dest_disks=len(dest_vm_info.disks),
-                    operation_id=operation_id,
-                )
 
             for i, source_disk in enumerate(source_vm_info.disks):
                 if i < len(dest_vm_info.disks):
                     dest_disk = dest_vm_info.disks[i]
+
+                    # Calculate progress percentage for this disk
+                    disk_progress = (transferred_bytes / total_bytes * 100) if total_bytes > 0 else 0.0
 
                     if progress_callback:
                         progress_callback(
                             ProgressInfo(
                                 operation_id=operation_id,
                                 operation_type=OperationType.SYNC,
-                                progress_percent=(i / len(source_vm_info.disks)) * 100,
+                                progress_percent=disk_progress,
                                 bytes_transferred=transferred_bytes,
                                 total_bytes=total_bytes,
                                 speed=0.0,
                                 eta=None,
                                 status=OperationStatusEnum.RUNNING,
-                                message=f"Synchronizing disk {source_disk.target}",
+                                message=f"Synchronizing disk {i + 1}/{len(source_vm_info.disks)} ({source_disk.target})",
                                 current_file=source_disk.path,
                             )
                         )
@@ -212,27 +225,56 @@ class VMSynchronizer:
             async with self.transport.connect(dest_host) as dest_conn:
                 dest_vm_info = await self.libvirt.get_vm_info(dest_conn, dest_vm_name)
 
-            # Calculate differences (simplified implementation)
+            # Calculate differences using rsync --dry-run
             total_size = sum(disk.size for disk in source_vm_info.disks)
             changed_size = 0
             changed_blocks = 0
             files_changed = []
 
-            # In a real implementation, this would use tools like rsync --dry-run
-            # or qemu-img compare to calculate actual differences
             for i, source_disk in enumerate(source_vm_info.disks):
                 if i < len(dest_vm_info.disks):
-                    _dest_disk = dest_vm_info.disks[i]
+                    dest_disk = dest_vm_info.disks[i]
 
-                    # Simplified: assume some percentage has changed
-                    # Real implementation would compare checksums, modification times, etc.
-                    estimated_change = source_disk.size * 0.1  # Assume 10% changed
-                    changed_size += int(estimated_change)
-                    changed_blocks += int(estimated_change / 4096)  # Assume 4KB blocks
-                    files_changed.append(source_disk.path)
+                    # Use rsync --dry-run to calculate actual delta
+                    try:
+                        # Build rsync --dry-run --stats command
+                        rsync_cmd = CommandBuilder.build_rsync_command(
+                            source_path=source_disk.path,
+                            dest_path=dest_disk.path,
+                            dest_host=dest_host,
+                            additional_options=["--dry-run", "--stats"],
+                        )
+
+                        async with self.transport.connect(source_host) as conn:
+                            stdout, stderr, exit_code = await conn.execute_command(rsync_cmd)
+
+                        # Parse rsync stats output
+                        stats = self._parse_rsync_stats(stdout)
+                        disk_changed_size = stats.get("transferred_size", source_disk.size)
+                        changed_size += disk_changed_size
+                        changed_blocks += disk_changed_size // DEFAULT_BLOCK_SIZE
+
+                        if disk_changed_size > 0:
+                            files_changed.append(source_disk.path)
+
+                        logger.debug(
+                            f"Delta calculation for {source_disk.path}: {disk_changed_size} bytes",
+                            source_disk=source_disk.path,
+                            changed_bytes=disk_changed_size,
+                        )
+
+                    except Exception as e:
+                        # Fallback: assume full disk needs transfer
+                        logger.warning(
+                            f"rsync --dry-run failed for {source_disk.path}, assuming full transfer: {e}",
+                            source_disk=source_disk.path,
+                        )
+                        changed_size += source_disk.size
+                        changed_blocks += source_disk.size // DEFAULT_BLOCK_SIZE
+                        files_changed.append(source_disk.path)
 
             # Estimate transfer time based on changed size and typical network speed
-            estimated_speed = 100 * 1024 * 1024  # 100 MB/s
+            estimated_speed = DEFAULT_NETWORK_SPEED_BYTES
             estimated_transfer_time = (
                 changed_size / estimated_speed if changed_size > 0 else 0
             )
@@ -245,9 +287,46 @@ class VMSynchronizer:
                 estimated_transfer_time=estimated_transfer_time,
             )
 
+        except (VMNotFoundError, TransferError, ValidationError):
+            raise
         except Exception as e:
             logger.error(f"Failed to calculate delta: {e}", exc_info=True)
             raise TransferError(str(e), source_host, dest_host)
+
+    def _parse_rsync_stats(self, rsync_output: str) -> Dict[str, int]:
+        """Parse rsync --stats output to extract transfer information.
+
+        Args:
+            rsync_output: Output from rsync --stats command
+
+        Returns:
+            Dict with 'total_size' and 'transferred_size' keys
+        """
+        stats = {
+            "total_size": 0,
+            "transferred_size": 0,
+        }
+
+        for line in rsync_output.split('\n'):
+            line = line.strip()
+
+            # Match: "Total file size: 1,234,567 bytes"
+            if line.startswith("Total file size:"):
+                size_str = line.split(":")[1].strip().split()[0].replace(",", "")
+                try:
+                    stats["total_size"] = int(size_str)
+                except ValueError:
+                    pass
+
+            # Match: "Total transferred file size: 123,456 bytes"
+            elif line.startswith("Total transferred file size:"):
+                size_str = line.split(":")[1].strip().split()[0].replace(",", "")
+                try:
+                    stats["transferred_size"] = int(size_str)
+                except ValueError:
+                    pass
+
+        return stats
 
     async def _create_checkpoint(self, host: str, vm_name: str) -> None:
         """Create a checkpoint/snapshot before synchronization."""
@@ -361,18 +440,58 @@ class VMSynchronizer:
             if exit_code != 0:
                 raise TransferError(f"Rsync failed: {stderr}", source_host, dest_host)
 
-            # Parse rsync output for statistics (simplified)
-            bytes_transferred = 0
-            blocks_synchronized = 0
+            # Parse rsync output for actual transfer statistics
+            stats = self._parse_rsync_transfer_stats(stdout)
 
-            # In a real implementation, parse rsync output to get actual statistics
-            # For now, return placeholder values
             return {
-                "bytes_transferred": bytes_transferred,
-                "blocks_synchronized": blocks_synchronized,
+                "bytes_transferred": stats.get("bytes_transferred", 0),
+                "blocks_synchronized": stats.get("blocks_synchronized", 0),
             }
 
-        except ValidationError as e:
-            raise TransferError(f"Validation error: {e}", source_host, dest_host)
+        except (ValidationError, TransferError):
+            raise
         except Exception as e:
             raise TransferError(str(e), source_host, dest_host)
+
+    def _parse_rsync_transfer_stats(self, rsync_output: str) -> Dict[str, int]:
+        """Parse rsync verbose output for transfer statistics.
+
+        Args:
+            rsync_output: Output from rsync command with --verbose or --stats
+
+        Returns:
+            Dict with 'bytes_transferred' and 'blocks_synchronized' keys
+        """
+        stats = {
+            "bytes_transferred": 0,
+            "blocks_synchronized": 0,
+        }
+
+        for line in rsync_output.split('\n'):
+            line = line.strip()
+
+            # Match: "sent X bytes  received Y bytes"
+            if "sent " in line and " bytes" in line:
+                parts = line.split()
+                for i, part in enumerate(parts):
+                    if part == "sent" and i + 1 < len(parts):
+                        sent_str = parts[i + 1].replace(",", "")
+                        try:
+                            stats["bytes_transferred"] = int(sent_str)
+                        except ValueError:
+                            pass
+                        break
+
+            # Alternative: look for "Total transferred file size: X bytes"
+            if "Total transferred file size:" in line:
+                size_str = line.split(":")[1].strip().split()[0].replace(",", "")
+                try:
+                    stats["bytes_transferred"] = int(size_str)
+                except (ValueError, IndexError):
+                    pass
+
+        # Calculate blocks synchronized from bytes
+        if stats["bytes_transferred"] > 0:
+            stats["blocks_synchronized"] = stats["bytes_transferred"] // DEFAULT_BLOCK_SIZE
+
+        return stats

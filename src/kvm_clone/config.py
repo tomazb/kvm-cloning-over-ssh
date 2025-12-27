@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from .exceptions import ConfigurationError
 from .logging import logger
+from .constants import DEFAULT_OPERATION_TIMEOUT, DEFAULT_PARALLEL_TRANSFERS
 
 
 class AppConfig(BaseModel):
@@ -20,14 +21,19 @@ class AppConfig(BaseModel):
 
     ssh_key_path: Optional[str] = None
     default_timeout: int = Field(
-        default=30, gt=0, description="Default SSH timeout in seconds"
+        default=DEFAULT_OPERATION_TIMEOUT,  # 3600 seconds (1 hour) for VM operations
+        gt=0,
+        description="Default operation timeout in seconds",
     )
     log_level: str = Field(default="INFO", description="Logging level")
     known_hosts_file: Optional[str] = None
 
     # Default values for operations
     default_parallel_transfers: int = Field(
-        default=4, gt=0, description="Number of parallel transfers"
+        default=DEFAULT_PARALLEL_TRANSFERS,
+        gt=0,
+        le=32,  # Add upper bound validation
+        description="Number of parallel transfers",
     )
     default_bandwidth_limit: Optional[str] = Field(default=None, pattern=r"^\d+[KMG]?$")
 

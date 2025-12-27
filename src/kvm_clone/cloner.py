@@ -120,23 +120,27 @@ class VMCloner:
                 )
 
                 # Transfer disk images and collect path mappings
-                total_bytes = 0
+                # Calculate total bytes for progress tracking
+                total_bytes = sum(disk.size for disk in vm_info.disks)
                 transferred_bytes = 0
                 disk_path_mappings = {}  # old_path -> new_path mapping
 
-                for disk in vm_info.disks:
+                for i, disk in enumerate(vm_info.disks):
+                    # Calculate progress percentage for this disk
+                    disk_progress = (transferred_bytes / total_bytes * 100) if total_bytes > 0 else 0.0
+
                     if progress_callback:
                         progress_callback(
                             ProgressInfo(
                                 operation_id=operation_id,
                                 operation_type=OperationType.CLONE,
-                                progress_percent=0.0,
+                                progress_percent=disk_progress,
                                 bytes_transferred=transferred_bytes,
                                 total_bytes=total_bytes,
                                 speed=0.0,
                                 eta=None,
                                 status=OperationStatusEnum.RUNNING,
-                                message=f"Transferring disk {disk.target}",
+                                message=f"Transferring disk {i + 1}/{len(vm_info.disks)} ({disk.target})",
                                 current_file=disk.path,
                             )
                         )

@@ -18,6 +18,11 @@ from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
 from kvm_clone.exceptions import KVMCloneError, ConfigurationError
 from kvm_clone.config import config_loader
 
+# ASCII markers for terminal compatibility
+SUCCESS_MARKER = "[OK]"
+ERROR_MARKER = "[ERROR]"
+FAIL_MARKER = "[FAIL]"
+
 
 # Configure logging
 logging.basicConfig(
@@ -190,7 +195,7 @@ def clone(
 
                 if result.success:
                     click.echo(
-                        f"✓ Successfully cloned VM '{vm_name}' to '{result.new_vm_name}'"
+                        f"{SUCCESS_MARKER} Successfully cloned VM '{vm_name}' to '{result.new_vm_name}'"
                     )
                     click.echo(f"  Duration: {result.duration:.1f}s")
                     click.echo(f"  Bytes transferred: {result.bytes_transferred}")
@@ -199,14 +204,14 @@ def clone(
                         for warning in result.warnings:
                             click.echo(f"  Warning: {warning}", err=True)
                 else:
-                    click.echo(f"✗ Clone failed: {result.error}", err=True)
+                    click.echo(f"{FAIL_MARKER} Clone failed: {result.error}", err=True)
                     sys.exit(1)
 
         except KVMCloneError as e:
-            click.echo(f"✗ Error: {e}", err=True)
+            click.echo(f"{ERROR_MARKER} Error: {e}", err=True)
             sys.exit(e.error_code)
         except Exception as e:
-            click.echo(f"✗ Unexpected error: {e}", err=True)
+            click.echo(f"{ERROR_MARKER} Unexpected error: {e}", err=True)
             sys.exit(1)
 
     asyncio.run(run_clone())
@@ -273,19 +278,19 @@ def sync(
                     click.echo()  # New line after progress
 
                 if result.success:
-                    click.echo(f"✓ Successfully synchronized VM '{vm_name}'")
+                    click.echo(f"{SUCCESS_MARKER} Successfully synchronized VM '{vm_name}'")
                     click.echo(f"  Duration: {result.duration:.1f}s")
                     click.echo(f"  Bytes transferred: {result.bytes_transferred}")
                     click.echo(f"  Blocks synchronized: {result.blocks_synchronized}")
                 else:
-                    click.echo(f"✗ Sync failed: {result.error}", err=True)
+                    click.echo(f"{FAIL_MARKER} Sync failed: {result.error}", err=True)
                     sys.exit(1)
 
         except KVMCloneError as e:
-            click.echo(f"✗ Error: {e}", err=True)
+            click.echo(f"{ERROR_MARKER} Error: {e}", err=True)
             sys.exit(e.error_code)
         except Exception as e:
-            click.echo(f"✗ Unexpected error: {e}", err=True)
+            click.echo(f"{ERROR_MARKER} Unexpected error: {e}", err=True)
             sys.exit(1)
 
     asyncio.run(run_sync())
@@ -361,10 +366,10 @@ def list_vms(
                     click.echo(json.dumps(json_data, indent=2))
 
         except KVMCloneError as e:
-            click.echo(f"✗ Error: {e}", err=True)
+            click.echo(f"{ERROR_MARKER} Error: {e}", err=True)
             sys.exit(e.error_code)
         except Exception as e:
-            click.echo(f"✗ Unexpected error: {e}", err=True)
+            click.echo(f"{ERROR_MARKER} Unexpected error: {e}", err=True)
             sys.exit(1)
 
     asyncio.run(run_list())

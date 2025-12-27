@@ -6,7 +6,9 @@ This module provides a high-level interface to libvirt for VM management operati
 
 from __future__ import annotations
 
+import asyncio
 import random
+import shlex
 import uuid
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
@@ -24,29 +26,74 @@ from .models import VMInfo, DiskInfo, NetworkInfo, VMState, ResourceInfo
 from .exceptions import LibvirtError, VMNotFoundError, ConnectionError
 from .transport import SSHConnection
 from .logging import logger
+from .constants import LIBVIRT_MAC_PREFIX, DEFAULT_DISK_POOL_PATH
+
+# Module-level constant: libvirt state to VMState mapping
+# Built lazily to avoid errors when libvirt is not installed (e.g., during testing)
+LIBVIRT_STATE_MAP: Dict[int, VMState] = {}
+
+
+def _init_libvirt_state_map() -> Dict[int, VMState]:
+    """Initialize libvirt state map lazily."""
+    global LIBVIRT_STATE_MAP
+    if libvirt is not None and not LIBVIRT_STATE_MAP:
+        LIBVIRT_STATE_MAP = {
+            libvirt.VIR_DOMAIN_RUNNING: VMState.RUNNING,
+            libvirt.VIR_DOMAIN_BLOCKED: VMState.RUNNING,
+            libvirt.VIR_DOMAIN_PAUSED: VMState.PAUSED,
+            libvirt.VIR_DOMAIN_SHUTDOWN: VMState.STOPPED,
+            libvirt.VIR_DOMAIN_SHUTOFF: VMState.STOPPED,
+            libvirt.VIR_DOMAIN_CRASHED: VMState.STOPPED,
+            libvirt.VIR_DOMAIN_PMSUSPENDED: VMState.SUSPENDED,
+        }
+    return LIBVIRT_STATE_MAP
 
 
 class LibvirtWrapper:
     """Wrapper for libvirt operations."""
 
-    def __init__(self) -> None:
-        """Initialize libvirt wrapper."""
+    def __init__(self, connection_ttl: int = 300) -> None:
+        """Initialize libvirt wrapper.
+
+        Args:
+            connection_ttl: Connection time-to-live in seconds (default: 5 minutes)
+        """
         self._connections: Dict[str, Any] = {}
+        self._connection_timestamps: Dict[str, float] = {}
+        self._connection_ttl = connection_ttl
+        self._cpu_stats_cache: Dict[str, tuple[float, float]] = {}  # host -> (time, cpu_time)
 
     async def connect_to_host(self, ssh_conn: SSHConnection) -> Any:
         """Connect to libvirt on a remote host via SSH."""
         try:
             # Build libvirt URI for SSH connection
             uri = f"qemu+ssh://{ssh_conn.username or 'root'}@{ssh_conn.host}/system"
+            current_time = asyncio.get_event_loop().time()
 
             # Check if we already have a connection
             if uri in self._connections:
                 conn = self._connections[uri]
+                timestamp = self._connection_timestamps.get(uri, 0)
+
+                # Check if connection is still alive and not stale
                 if conn.isAlive():
-                    return conn
+                    if (current_time - timestamp) < self._connection_ttl:
+                        # Connection is valid, update timestamp and return
+                        self._connection_timestamps[uri] = current_time
+                        return conn
+                    else:
+                        # Connection is stale, close and remove
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                        del self._connections[uri]
+                        del self._connection_timestamps[uri]
                 else:
                     # Connection is dead, remove it
                     del self._connections[uri]
+                    if uri in self._connection_timestamps:
+                        del self._connection_timestamps[uri]
 
             # Create new connection
             conn = libvirt.open(uri)
@@ -56,6 +103,7 @@ class LibvirtWrapper:
                 )
 
             self._connections[uri] = conn
+            self._connection_timestamps[uri] = current_time
             logger.info(f"Connected to libvirt on {ssh_conn.host}", host=ssh_conn.host)
             return conn
 
@@ -66,7 +114,7 @@ class LibvirtWrapper:
                 exc_info=True,
             )
             raise LibvirtError(str(e), "connection")
-        except Exception as e:
+        except (OSError, ConnectionError) as e:
             logger.error(
                 f"Connection error to {ssh_conn.host}: {e}",
                 host=ssh_conn.host,
@@ -135,16 +183,8 @@ class LibvirtWrapper:
             name = domain.name()
             uuid = domain.UUIDString()
 
-            # Map libvirt state to our enum
-            state_map = {
-                libvirt.VIR_DOMAIN_RUNNING: VMState.RUNNING,
-                libvirt.VIR_DOMAIN_BLOCKED: VMState.RUNNING,
-                libvirt.VIR_DOMAIN_PAUSED: VMState.PAUSED,
-                libvirt.VIR_DOMAIN_SHUTDOWN: VMState.STOPPED,
-                libvirt.VIR_DOMAIN_SHUTOFF: VMState.STOPPED,
-                libvirt.VIR_DOMAIN_CRASHED: VMState.STOPPED,
-                libvirt.VIR_DOMAIN_PMSUSPENDED: VMState.SUSPENDED,
-            }
+            # Map libvirt state to our enum using lazily-initialized mapping
+            state_map = _init_libvirt_state_map()
             state = state_map.get(info[0], VMState.UNKNOWN)
 
             # Get XML configuration
@@ -165,8 +205,29 @@ class LibvirtWrapper:
                         driver.get("type", "raw") if driver is not None else "raw"
                     )
 
-                    # Get disk size (this would need additional libvirt calls)
-                    disk_size = 0  # Placeholder
+                    # Get disk size using libvirt blockInfo API
+                    # blockInfo returns: (capacity, allocation, physical)
+                    # - capacity: logical size of the disk in bytes
+                    # - allocation: host storage actually used (sparse files)
+                    # - physical: physical size on disk
+                    disk_size = 0
+                    try:
+                        block_info = domain.blockInfo(disk_target)
+                        if block_info and len(block_info) >= 1:
+                            disk_size = block_info[0]  # capacity (logical size)
+                            logger.debug(
+                                f"Got disk size from libvirt blockInfo: {disk_size}",
+                                disk=disk_path,
+                                host=host,
+                            )
+                    except (libvirt.libvirtError, IndexError, AttributeError) as e:
+                        logger.debug(
+                            f"Could not get disk size via blockInfo for {disk_path}: {e}",
+                            disk=disk_path,
+                            host=host,
+                        )
+                        # Fallback to 0 - actual size would require SSH access to run qemu-img
+                        disk_size = 0
 
                     disks.append(
                         DiskInfo(
@@ -214,11 +275,11 @@ class LibvirtWrapper:
                 disks=disks,
                 networks=networks,
                 host=host,
-                created=datetime.now(),  # Placeholder
-                last_modified=datetime.now(),  # Placeholder
+                created=datetime.now(),  # Libvirt doesn't track creation time
+                last_modified=datetime.now(),  # Libvirt doesn't track modification time
             )
 
-        except Exception as e:
+        except libvirt.libvirtError as e:
             raise LibvirtError(str(e), "parse_vm_info")
 
     async def clone_vm_definition(
@@ -255,8 +316,8 @@ class LibvirtWrapper:
             # Handle MAC addresses
             if not preserve_mac:
                 for interface in root.findall(".//interface/mac"):
-                    # Generate new MAC address
-                    mac = "52:54:00:%02x:%02x:%02x" % (
+                    # Generate new MAC address using standard libvirt prefix
+                    mac = f"{LIBVIRT_MAC_PREFIX}%02x:%02x:%02x" % (
                         random.randint(0, 255),
                         random.randint(0, 255),
                         random.randint(0, 255),
@@ -308,13 +369,59 @@ class LibvirtWrapper:
             total_memory = mem_stats.get("total", 0) // 1024  # Convert KB to MB
             free_memory = mem_stats.get("free", 0) // 1024
 
+            # Get CPU usage using caching mechanism
+            cpu_usage = 0.0
+            try:
+                cpu_stats = conn.getCPUStats(libvirt.VIR_NODE_CPU_STATS_ALL_CPUS)
+                if cpu_stats and "cpu_time" in cpu_stats:
+                    current_time = asyncio.get_event_loop().time()
+                    current_cpu_time = cpu_stats["cpu_time"]  # nanoseconds
+
+                    host = ssh_conn.host
+                    if host in self._cpu_stats_cache:
+                        prev_time, prev_cpu_time = self._cpu_stats_cache[host]
+                        time_delta = current_time - prev_time  # seconds
+                        cpu_delta = (current_cpu_time - prev_cpu_time) / 1e9  # convert ns to seconds
+
+                        if time_delta > 0:
+                            # CPU usage = (cpu_time_delta / (time_delta * num_cpus)) * 100
+                            cpu_count = node_info[2]
+                            cpu_usage = (cpu_delta / (time_delta * cpu_count)) * 100
+                            # Clamp to reasonable range [0, 100]
+                            cpu_usage = max(0.0, min(100.0, cpu_usage))
+
+                    self._cpu_stats_cache[host] = (current_time, current_cpu_time)
+            except (libvirt.libvirtError, AttributeError, KeyError) as e:
+                logger.debug(f"Could not get CPU stats for {ssh_conn.host}: {e}")
+                cpu_usage = 0.0
+
+            # Get disk space via df command
+            total_disk = 0
+            available_disk = 0
+            try:
+                df_command = f"df -B1 {shlex.quote(DEFAULT_DISK_POOL_PATH)}"
+                stdout, stderr, exit_code = await ssh_conn.execute_command(df_command)
+
+                if exit_code == 0:
+                    # Parse df output:
+                    # Filesystem 1K-blocks Used Available Use% Mounted on
+                    # /dev/sda1  1234567890 987654321 123456789 80% /
+                    lines = stdout.strip().split('\n')
+                    if len(lines) >= 2:
+                        parts = lines[1].split()
+                        if len(parts) >= 4:
+                            total_disk = int(parts[1])
+                            available_disk = int(parts[3])
+            except Exception as e:
+                logger.debug(f"Could not get disk space for {ssh_conn.host}: {e}")
+
             return ResourceInfo(
                 total_memory=total_memory,
                 available_memory=free_memory,
-                total_disk=0,  # Would need additional calls to get disk info
-                available_disk=0,
+                total_disk=total_disk,
+                available_disk=available_disk,
                 cpu_count=node_info[2],
-                cpu_usage=0.0,  # Would need additional monitoring
+                cpu_usage=cpu_usage,
             )
 
         except libvirt.libvirtError as e:
@@ -334,12 +441,46 @@ class LibvirtWrapper:
         except libvirt.libvirtError as e:
             raise LibvirtError(str(e), "vm_exists")
 
+    async def cleanup_stale_connections(self) -> int:
+        """Clean up stale libvirt connections.
+
+        Returns:
+            int: Number of closed connections
+        """
+        current_time = asyncio.get_event_loop().time()
+        stale_uris = []
+
+        for uri, conn in self._connections.items():
+            timestamp = self._connection_timestamps.get(uri, 0)
+            age = current_time - timestamp
+
+            # Check if stale or dead
+            if age > self._connection_ttl or not conn.isAlive():
+                stale_uris.append(uri)
+
+        for uri in stale_uris:
+            conn = self._connections[uri]
+            try:
+                conn.close()
+            except Exception as e:
+                # Log at debug level - connection close errors are not critical
+                logger.debug(f"Error closing libvirt connection {uri}: {e}")
+            del self._connections[uri]
+            del self._connection_timestamps[uri]
+
+        if stale_uris:
+            logger.info(f"Cleaned up {len(stale_uris)} stale libvirt connections")
+
+        return len(stale_uris)
+
     def close_all_connections(self) -> None:
         """Close all libvirt connections."""
         for uri, conn in self._connections.items():
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # Log at debug level - connection close errors are not critical
+                logger.debug(f"Error closing libvirt connection {uri}: {e}")
         self._connections.clear()
+        self._connection_timestamps.clear()
         logger.info("All libvirt connections closed")
