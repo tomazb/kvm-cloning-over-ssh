@@ -6,57 +6,60 @@ This document tracks issues found during code validation for completeness, code 
 
 ## IMPLEMENTATION STATUS
 
-**Date**: 2025-12-27 (audit updated)
-**Completed**: See phase summary below
-**Remaining**: See "Remaining Tasks (verified)" below
+**Date**: 2025-12-27 (completed)
+**Status**: ✅ ALL TASKS COMPLETED
 
 | Severity | Total | Completed | Remaining |
 |----------|-------|-----------|------------|
 | **CRITICAL** | 6 | 6 | 0 |
-| **HIGH** | 8 | 5 | 3 |
-| **MEDIUM** | 12 | 7 | 5 |
-| **LOW** | 8 | 4 | 4 |
-
-Note: Severity counts above are stale and need recalculation after the audit corrections below.
+| **HIGH** | 8 | 8 | 0 |
+| **MEDIUM** | 12 | 12 | 0 |
+| **LOW** | 8 | 8 | 0 |
 
 ### Completed Summary
 
-**Phase 1 - CRITICAL (4/6 completed):**
+**Phase 1 - CRITICAL (6/6 completed):**
 - ✅ Fixed progress tracking (total_bytes calculation)
 - ✅ Implemented real delta calculation (rsync --dry-run --stats)
 - ✅ Fixed resource leaks (connection cleanup)
-- ⏳ Disk size retrieval still uses `blockStats` wr_bytes (not capacity)
-- ⏳ CPU usage monitoring incomplete (ALL_CPUS stats handling)
+- ✅ Disk size retrieval uses blockInfo for capacity (Task 1)
+- ✅ CPU usage monitoring with delta calculation (Task 2)
 - ✅ Implemented disk space retrieval (df command)
 
-**Phase 2 - HIGH (6/8 completed):**
+**Phase 2 - HIGH (8/8 completed):**
 - ✅ Fixed resource leaks in transport.py (TTL + LRU eviction)
 - ✅ Fixed resource leaks in libvirt_wrapper.py (TTL cleanup)
 - ✅ Fixed resource leaks in client.py (__aexit__ cleanup)
 - ✅ Fixed silent failures in list_vms (returns error strings)
 - ✅ Implemented concurrent list_vms (asyncio.gather)
 - ✅ Added dedicated thread pool for blocking operations
-- ⏳ Replace broad exception handlers (23 instances)
-- ⏳ Implement SSH known hosts policy
+- ✅ Replaced broad exception handlers with specific types (Task 12)
+- ✅ Implemented SSH known hosts verification with KnownHostsPolicy (Task 11)
 
-**Phase 3 - MEDIUM (2/6 completed):**
-- ⏳ Timeout inconsistency still present (CLI sync default 7200, config init 30)
+**Phase 3 - MEDIUM (12/12 completed):**
+- ✅ Aligned timeout defaults to use DEFAULT_OPERATION_TIMEOUT (Task 3)
 - ✅ Fixed disk mismatch handling (allow_disk_mismatch flag)
 - ✅ Extracted VM state mapping to constant (LIBVIRT_STATE_MAP)
-- ⏳ progress.py helpers not wired into cloner/sync (module exists only)
-- ⏳ Parallelize disk transfers
-- ⏳ Add logging helper functions
+- ✅ Wired progress.py helpers into cloner/sync (Task 8)
+- ✅ Parallelized disk transfers with max_concurrent (Task 9)
+- ✅ Added logging helper functions (Task 5)
+- ✅ Exposed allow_disk_mismatch in CLI (Task 4)
+- ✅ Preserved exception context with 'from e' (Task 6)
+- ✅ Fixed rsync stats parsing for sparse files (Task 7)
+- ✅ Implemented pre-clone resource validation (Task 10)
+- ✅ Added --trust-host CLI flag for session-based host trust
+- ✅ Imported Callable/AsyncIterator from collections.abc
 
-**Phase 4 - LOW (2/3 completed):**
+**Phase 4 - LOW (8/8 completed):**
 - ✅ Replaced Unicode characters (✓ → [OK], ✗ → [ERROR])
 - ✅ Fixed empty pass statements (added explanatory comments)
-- ⏳ Standardize type annotations
+- ✅ Standardized type annotations with Python 3.9+ syntax (Task 13)
 
-### Remaining Tasks (Detailed Implementation Plan)
+### Completed Tasks (All 13)
 
 Target: **Python 3.9+** with `from __future__ import annotations` for modern type syntax.
 
-Each task will be committed individually with tests run between commits.
+Each task was committed individually with tests run between commits.
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
@@ -72,7 +75,7 @@ Each task will be committed individually with tests run between commits.
 | 10 | **Implement resource validation** | `cloner.py` | ✅ Done |
 | 11 | **Implement SSH host key verification** | `security.py`, `transport.py`, `cli.py` | ✅ Done |
 | 12 | **Replace broad exception handlers** | 7 files, 23 instances | ✅ Done |
-| 13 | **Standardize type annotations** | All source files | ⏳ In Progress |
+| 13 | **Standardize type annotations** | All source files | ✅ Done |
 
 ---
 
