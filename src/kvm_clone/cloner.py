@@ -23,6 +23,7 @@ from .exceptions import VMNotFoundError, TransferError, ValidationError, Libvirt
 from .transport import SSHTransport
 from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
+from .progress import create_disk_progress_info
 
 
 class VMCloner:
@@ -131,17 +132,14 @@ class VMCloner:
 
                     if progress_callback:
                         progress_callback(
-                            ProgressInfo(
+                            create_disk_progress_info(
                                 operation_id=operation_id,
                                 operation_type=OperationType.CLONE,
-                                progress_percent=disk_progress,
+                                disk_index=i,
+                                total_disks=len(vm_info.disks),
                                 bytes_transferred=transferred_bytes,
                                 total_bytes=total_bytes,
-                                speed=0.0,
-                                eta=None,
-                                status=OperationStatusEnum.RUNNING,
-                                message=f"Transferring disk {i + 1}/{len(vm_info.disks)} ({disk.target})",
-                                current_file=disk.path,
+                                disk_path=disk.path,
                             )
                         )
 

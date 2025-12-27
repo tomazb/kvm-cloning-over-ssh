@@ -23,6 +23,7 @@ from .libvirt_wrapper import LibvirtWrapper
 from .security import SecurityValidator, CommandBuilder
 from .logging import logger
 from .constants import DEFAULT_BLOCK_SIZE, DEFAULT_NETWORK_SPEED_BYTES
+from .progress import create_disk_progress_info
 
 
 class VMSynchronizer:
@@ -122,17 +123,14 @@ class VMSynchronizer:
 
                     if progress_callback:
                         progress_callback(
-                            ProgressInfo(
+                            create_disk_progress_info(
                                 operation_id=operation_id,
                                 operation_type=OperationType.SYNC,
-                                progress_percent=disk_progress,
+                                disk_index=i,
+                                total_disks=len(source_vm_info.disks),
                                 bytes_transferred=transferred_bytes,
                                 total_bytes=total_bytes,
-                                speed=0.0,
-                                eta=None,
-                                status=OperationStatusEnum.RUNNING,
-                                message=f"Synchronizing disk {i + 1}/{len(source_vm_info.disks)} ({source_disk.target})",
-                                current_file=source_disk.path,
+                                disk_path=source_disk.path,
                             )
                         )
 
