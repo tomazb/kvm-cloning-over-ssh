@@ -60,16 +60,16 @@ Each task will be committed individually with tests run between commits.
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1 | **Fix disk size retrieval** | `libvirt_wrapper.py` | ⏳ In Progress |
-| 2 | **Fix CPU usage monitoring** | `libvirt_wrapper.py` | ⏳ Pending |
-| 3 | **Align timeout defaults** | `cli.py` | ⏳ Pending |
-| 4 | **Expose allow_disk_mismatch** | `cli.py`, `client.py` | ⏳ Pending |
-| 5 | **Add logging helper functions** | `logging.py` | ⏳ Pending |
-| 6 | **Preserve exception context** | `cloner.py`, `sync.py`, `transport.py`, `config.py` | ⏳ Pending |
-| 7 | **Fix rsync stats parsing** | `sync.py` | ⏳ Pending |
-| 8 | **Adopt progress helpers** | `cloner.py`, `sync.py` | ⏳ Pending |
-| 9 | **Parallelize disk transfers** | `cloner.py`, `sync.py` | ⏳ Pending |
-| 10 | **Implement resource validation** | `cloner.py` | ⏳ Pending |
+| 1 | **Fix disk size retrieval** | `libvirt_wrapper.py` | ✅ Done |
+| 2 | **Fix CPU usage monitoring** | `libvirt_wrapper.py` | ✅ Done |
+| 3 | **Align timeout defaults** | `cli.py` | ✅ Done |
+| 4 | **Expose allow_disk_mismatch** | `cli.py`, `client.py` | ✅ Done |
+| 5 | **Add logging helper functions** | `logging.py` | ✅ Done |
+| 6 | **Preserve exception context** | `cloner.py`, `sync.py`, `transport.py`, `config.py` | ✅ Done |
+| 7 | **Fix rsync stats parsing** | `sync.py` | ✅ Done |
+| 8 | **Adopt progress helpers** | `cloner.py`, `sync.py` | ✅ Done |
+| 9 | **Parallelize disk transfers** | `cloner.py`, `sync.py`, `models.py` | ✅ Done |
+| 10 | **Implement resource validation** | `cloner.py` | ⏳ In Progress |
 | 11 | **Implement SSH host key verification** | `security.py`, `transport.py`, `cli.py` | ⏳ Pending |
 | 12 | **Replace broad exception handlers** | 7 files, 23 instances | ⏳ Pending |
 | 13 | **Standardize type annotations** | All source files | ⏳ Pending |

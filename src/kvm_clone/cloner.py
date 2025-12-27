@@ -247,6 +247,7 @@ class VMCloner:
         """
         errors = []
         warnings = []
+        vm_info = None
 
         try:
             # Verify source VM exists
@@ -280,8 +281,27 @@ class VMCloner:
 
                 # Check destination resources
                 try:
-                    _resources = await self.libvirt.get_host_resources(dest_conn)
-                    # Add resource validation logic here
+                    resources = await self.libvirt.get_host_resources(dest_conn)
+                    
+                    # Validate memory: VM memory (MB) vs available memory (MB)
+                    if vm_info is not None:
+                        if resources.available_memory < vm_info.memory:
+                            errors.append(
+                                f"Insufficient memory on destination: "
+                                f"available {resources.available_memory}MB, "
+                                f"required {vm_info.memory}MB"
+                            )
+                        
+                        # Validate disk space: disk sizes (bytes) vs available disk (bytes)
+                        total_disk_required = sum(disk.size for disk in vm_info.disks)
+                        if resources.available_disk < total_disk_required:
+                            available_gb = resources.available_disk / (1024 ** 3)
+                            required_gb = total_disk_required / (1024 ** 3)
+                            errors.append(
+                                f"Insufficient disk space on destination: "
+                                f"available {available_gb:.1f}GB, "
+                                f"required {required_gb:.1f}GB"
+                            )
                 except Exception as e:
                     warnings.append(f"Could not check destination resources: {e}")
 
