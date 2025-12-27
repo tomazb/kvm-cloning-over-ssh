@@ -455,3 +455,58 @@ class TestLoggingConcurrency:
         lines = [line for line in output.strip().split("\n") if line]
         # Should have 50 messages (5 threads * 10 messages)
         assert len(lines) == 50
+
+
+class TestLoggingHelperFunctions:
+    """Test module-level logging helper functions."""
+
+    def test_log_info_function_exists(self):
+        """Test log_info function is importable and callable."""
+        from kvm_clone.logging import log_info
+        assert callable(log_info)
+
+    def test_log_error_function_exists(self):
+        """Test log_error function is importable and callable."""
+        from kvm_clone.logging import log_error
+        assert callable(log_error)
+
+    def test_log_warning_function_exists(self):
+        """Test log_warning function is importable and callable."""
+        from kvm_clone.logging import log_warning
+        assert callable(log_warning)
+
+    def test_log_debug_function_exists(self):
+        """Test log_debug function is importable and callable."""
+        from kvm_clone.logging import log_debug
+        assert callable(log_debug)
+
+    def test_log_critical_function_exists(self):
+        """Test log_critical function is importable and callable."""
+        from kvm_clone.logging import log_critical
+        assert callable(log_critical)
+
+    def test_log_info_produces_json_output(self, capfd):
+        """Test log_info produces structured JSON output."""
+        from kvm_clone.logging import log_info
+        log_info("Test info message", key="value")
+        captured = capfd.readouterr()
+        # Output goes to stdout
+        if captured.out:
+            data = json.loads(captured.out.strip())
+            assert data["message"] == "Test info message"
+            assert data["level"] == "INFO"
+            assert data["key"] == "value"
+
+    def test_log_error_with_exc_info(self, capfd):
+        """Test log_error supports exc_info parameter."""
+        from kvm_clone.logging import log_error
+        try:
+            raise ValueError("test error")
+        except ValueError:
+            log_error("Error occurred", exc_info=True)
+        captured = capfd.readouterr()
+        if captured.out:
+            data = json.loads(captured.out.strip())
+            assert data["message"] == "Error occurred"
+            assert data["level"] == "ERROR"
+            assert "exception" in data

@@ -86,3 +86,29 @@ class StructuredLogger:
 
 # Global logger instance
 logger = StructuredLogger("kvm_clone")
+
+
+# Convenience module-level functions for direct logging without 'logger.' prefix
+def log_info(message: str, **kwargs: Any) -> None:
+    """Log an info message with optional context fields."""
+    logger.info(message, **kwargs)
+
+
+def log_error(message: str, exc_info: bool = False, **kwargs: Any) -> None:
+    """Log an error message with optional exception info and context fields."""
+    logger.error(message, exc_info=exc_info, **kwargs)
+
+
+def log_warning(message: str, **kwargs: Any) -> None:
+    """Log a warning message with optional context fields."""
+    logger.warning(message, **kwargs)
+
+
+def log_debug(message: str, **kwargs: Any) -> None:
+    """Log a debug message with optional context fields."""
+    logger.debug(message, **kwargs)
+
+
+def log_critical(message: str, exc_info: bool = True, **kwargs: Any) -> None:
+    """Log a critical message with optional exception info and context fields."""
+    logger.critical(message, exc_info=exc_info, **kwargs)
