@@ -102,6 +102,7 @@ class SyncOptions:
     delta_only: bool = True
     bandwidth_limit: Optional[str] = None
     allow_disk_mismatch: bool = False  # Allow sync despite disk count mismatch
+    parallel: int = DEFAULT_PARALLEL_TRANSFERS  # Number of parallel disk transfers
 
 
 @dataclass

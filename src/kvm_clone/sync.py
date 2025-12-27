@@ -4,6 +4,7 @@ VM synchronization operations.
 This module handles VM synchronization (incremental updates) between hosts.
 """
 
+import asyncio
 import shlex
 import uuid
 from typing import Optional, Callable, Dict
@@ -111,30 +112,26 @@ class VMSynchronizer:
             # Perform synchronization
             # Calculate total bytes for progress tracking
             total_bytes = sum(disk.size for disk in source_vm_info.disks)
-            transferred_bytes = 0
-            blocks_synchronized = 0
 
-            for i, source_disk in enumerate(source_vm_info.disks):
-                if i < len(dest_vm_info.disks):
-                    dest_disk = dest_vm_info.disks[i]
+            # Use semaphore for parallel transfers with concurrency limit
+            semaphore = asyncio.Semaphore(sync_options.parallel)
 
-                    # Calculate progress percentage for this disk
-                    disk_progress = (transferred_bytes / total_bytes * 100) if total_bytes > 0 else 0.0
-
+            async def sync_disk_with_limit(index: int, source_disk, dest_disk):
+                """Sync a single disk with semaphore limiting."""
+                async with semaphore:
                     if progress_callback:
                         progress_callback(
                             create_disk_progress_info(
                                 operation_id=operation_id,
                                 operation_type=OperationType.SYNC,
-                                disk_index=i,
+                                disk_index=index,
                                 total_disks=len(source_vm_info.disks),
-                                bytes_transferred=transferred_bytes,
-                                total_bytes=total_bytes,
+                                bytes_transferred=0,
+                                total_bytes=source_disk.size,
                                 disk_path=source_disk.path,
                             )
                         )
 
-                    # Sync disk
                     sync_stats = await self._sync_disk(
                         source_host,
                         dest_host,
@@ -144,9 +141,25 @@ class VMSynchronizer:
                         progress_callback,
                         operation_id,
                     )
+                    return sync_stats
 
-                    transferred_bytes += sync_stats["bytes_transferred"]
-                    blocks_synchronized += sync_stats["blocks_synchronized"]
+            # Build list of disk pairs to sync
+            disk_pairs = [
+                (i, source_disk, dest_vm_info.disks[i])
+                for i, source_disk in enumerate(source_vm_info.disks)
+                if i < len(dest_vm_info.disks)
+            ]
+
+            # Sync all disks in parallel with concurrency limit
+            tasks = [
+                sync_disk_with_limit(i, src, dst)
+                for i, src, dst in disk_pairs
+            ]
+            results = await asyncio.gather(*tasks)
+
+            # Aggregate results
+            transferred_bytes = sum(r["bytes_transferred"] for r in results)
+            blocks_synchronized = sum(r["blocks_synchronized"] for r in results)
 
             duration = (datetime.now() - start_time).total_seconds()
 

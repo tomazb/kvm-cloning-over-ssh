@@ -5,6 +5,7 @@ This module handles the actual VM cloning process including disk image transfer
 and VM definition creation.
 """
 
+import asyncio
 import uuid
 from typing import Optional, Callable
 from datetime import datetime
@@ -123,39 +124,49 @@ class VMCloner:
                 # Transfer disk images and collect path mappings
                 # Calculate total bytes for progress tracking
                 total_bytes = sum(disk.size for disk in vm_info.disks)
-                transferred_bytes = 0
                 disk_path_mappings = {}  # old_path -> new_path mapping
 
-                for i, disk in enumerate(vm_info.disks):
-                    # Calculate progress percentage for this disk
-                    disk_progress = (transferred_bytes / total_bytes * 100) if total_bytes > 0 else 0.0
+                # Use semaphore for parallel transfers with concurrency limit
+                semaphore = asyncio.Semaphore(clone_options.parallel)
 
-                    if progress_callback:
-                        progress_callback(
-                            create_disk_progress_info(
-                                operation_id=operation_id,
-                                operation_type=OperationType.CLONE,
-                                disk_index=i,
-                                total_disks=len(vm_info.disks),
-                                bytes_transferred=transferred_bytes,
-                                total_bytes=total_bytes,
-                                disk_path=disk.path,
+                async def transfer_disk_with_limit(index: int, disk):
+                    """Transfer a single disk with semaphore limiting."""
+                    async with semaphore:
+                        if progress_callback:
+                            progress_callback(
+                                create_disk_progress_info(
+                                    operation_id=operation_id,
+                                    operation_type=OperationType.CLONE,
+                                    disk_index=index,
+                                    total_disks=len(vm_info.disks),
+                                    bytes_transferred=0,  # Individual disk progress
+                                    total_bytes=disk.size,
+                                    disk_path=disk.path,
+                                )
                             )
+
+                        dest_path = await self._transfer_disk_image(
+                            source_host,
+                            dest_host,
+                            disk.path,
+                            new_vm_name,
+                            progress_callback,
+                            operation_id,
                         )
+                        return (disk.path, dest_path, disk.size)
 
-                    # Transfer disk image
-                    dest_path = await self._transfer_disk_image(
-                        source_host,
-                        dest_host,
-                        disk.path,
-                        new_vm_name,
-                        progress_callback,
-                        operation_id,
-                    )
+                # Transfer all disks in parallel with concurrency limit
+                tasks = [
+                    transfer_disk_with_limit(i, disk)
+                    for i, disk in enumerate(vm_info.disks)
+                ]
+                results = await asyncio.gather(*tasks)
 
-                    # Store mapping for XML update
-                    disk_path_mappings[disk.path] = dest_path
-                    transferred_bytes += disk.size
+                # Collect mappings and total transferred bytes
+                transferred_bytes = 0
+                for old_path, new_path, size in results:
+                    disk_path_mappings[old_path] = new_path
+                    transferred_bytes += size
 
                 # Update XML with new disk paths using ElementTree
                 import xml.etree.ElementTree as ET
