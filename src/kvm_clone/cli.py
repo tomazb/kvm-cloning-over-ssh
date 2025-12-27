@@ -5,11 +5,13 @@ Command-line interface for KVM cloning operations.
 This module provides the CLI interface as specified in the API documentation.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
 
 import click
 import yaml
@@ -46,7 +48,7 @@ def setup_logging(
     logging.getLogger().setLevel(level)
 
 
-def load_config(config_path: Optional[str]) -> dict[str, Any]:
+def load_config(config_path: str | None) -> dict[str, Any]:
     """Load configuration from file."""
     try:
         app_config = config_loader.load_config(config_path)
@@ -154,16 +156,16 @@ def clone(
     source_host: str,
     dest_host: str,
     vm_name: str,
-    new_name: Optional[str],
+    new_name: str | None,
     force: bool,
     dry_run: bool,
     parallel: int,
     compress: bool,
     verify: bool,
     timeout: int,
-    ssh_key: Optional[str],
+    ssh_key: str | None,
     preserve_mac: bool,
-    network_config: Optional[str],
+    network_config: str | None,
 ) -> None:
     """Clone a virtual machine from source to destination host."""
 
@@ -262,11 +264,11 @@ def sync(
     source_host: str,
     dest_host: str,
     vm_name: str,
-    target_name: Optional[str],
+    target_name: str | None,
     checkpoint: bool,
     delta_only: bool,
-    bandwidth_limit: Optional[str],
-    ssh_key: Optional[str],
+    bandwidth_limit: str | None,
+    ssh_key: str | None,
     timeout: int,
     allow_disk_mismatch: bool,
 ) -> None:
@@ -340,7 +342,7 @@ def list_vms(
     ctx: Any,
     hosts: tuple[str, ...],
     status: str,
-    ssh_key: Optional[str],
+    ssh_key: str | None,
 ) -> None:
     """List virtual machines on specified hosts."""
 

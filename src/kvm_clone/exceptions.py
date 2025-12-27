@@ -4,6 +4,8 @@ Custom exceptions for KVM cloning operations.
 This module defines all custom exceptions used throughout the KVM cloning system.
 """
 
+from __future__ import annotations
+
 
 class KVMCloneError(Exception):
     """Base exception for KVM clone operations."""

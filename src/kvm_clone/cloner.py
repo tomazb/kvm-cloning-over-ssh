@@ -5,9 +5,11 @@ This module handles the actual VM cloning process including disk image transfer
 and VM definition creation.
 """
 
+from __future__ import annotations
+
 import asyncio
 import uuid
-from typing import Optional, Callable
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -47,7 +49,7 @@ class VMCloner:
         dest_host: str,
         vm_name: str,
         clone_options: CloneOptions,
-        progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
+        progress_callback: Callable[[ProgressInfo], None] | None = None,
     ) -> CloneResult:
         """
         Clone a virtual machine from source to destination host.
@@ -324,7 +326,7 @@ class VMCloner:
         dest_host: str,
         source_path: str,
         new_vm_name: str,
-        progress_callback: Optional[Callable[[ProgressInfo], None]],
+        progress_callback: Callable[[ProgressInfo], None] | None,
         operation_id: str,
     ) -> str:
         """

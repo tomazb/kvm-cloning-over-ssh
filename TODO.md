@@ -71,8 +71,8 @@ Each task will be committed individually with tests run between commits.
 | 9 | **Parallelize disk transfers** | `cloner.py`, `sync.py`, `models.py` | ✅ Done |
 | 10 | **Implement resource validation** | `cloner.py` | ✅ Done |
 | 11 | **Implement SSH host key verification** | `security.py`, `transport.py`, `cli.py` | ✅ Done |
-| 12 | **Replace broad exception handlers** | 7 files, 23 instances | ⏳ In Progress |
-| 13 | **Standardize type annotations** | All source files | ⏳ Pending |
+| 12 | **Replace broad exception handlers** | 7 files, 23 instances | ✅ Done |
+| 13 | **Standardize type annotations** | All source files | ⏳ In Progress |
 
 ---
 

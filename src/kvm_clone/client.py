@@ -5,9 +5,12 @@ This module implements the primary interface for KVM virtual machine cloning
 and synchronization operations over SSH connections.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Optional, Dict, Any, List, Callable, Union
+from typing import Any
+from collections.abc import Callable
 
 from .models import (
     CloneOptions,
@@ -48,8 +51,8 @@ class KVMCloneClient:
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
-        ssh_key_path: Optional[str] = None,
+        config: dict[str, Any] | None = None,
+        ssh_key_path: str | None = None,
         timeout: int = 3600,
     ) -> None:
         """Initialize the KVM clone client."""
@@ -67,9 +70,9 @@ class KVMCloneClient:
         self.synchronizer = VMSynchronizer(self.transport, self.libvirt)
 
         # Operation tracking
-        self._operations: Dict[str, OperationStatus] = {}
+        self._operations: dict[str, OperationStatus] = {}
 
-    def _load_default_config(self) -> Dict[str, Any]:
+    def _load_default_config(self) -> dict[str, Any]:
         """Load default configuration."""
         return {
             "ssh_key_path": "~/.ssh/id_rsa",
@@ -86,15 +89,15 @@ class KVMCloneClient:
         dest_host: str,
         vm_name: str,
         *,
-        new_name: Optional[str] = None,
+        new_name: str | None = None,
         force: bool = False,
         dry_run: bool = False,
         parallel: int = 4,
         compress: bool = False,
         verify: bool = True,
         preserve_mac: bool = False,
-        network_config: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
+        network_config: dict[str, Any] | None = None,
+        progress_callback: Callable[[ProgressInfo], None] | None = None,
     ) -> CloneResult:
         """
         Clone a virtual machine from source to destination host.
@@ -153,12 +156,12 @@ class KVMCloneClient:
         dest_host: str,
         vm_name: str,
         *,
-        target_name: Optional[str] = None,
+        target_name: str | None = None,
         checkpoint: bool = False,
         delta_only: bool = True,
-        bandwidth_limit: Optional[str] = None,
+        bandwidth_limit: str | None = None,
         allow_disk_mismatch: bool = False,
-        progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
+        progress_callback: Callable[[ProgressInfo], None] | None = None,
     ) -> SyncResult:
         """
         Synchronize an existing VM between hosts (incremental transfer).
@@ -204,8 +207,8 @@ class KVMCloneClient:
         return result
 
     async def list_vms(
-        self, hosts: List[str], *, status_filter: Optional[str] = None
-    ) -> Dict[str, Union[List[VMInfo], str]]:
+        self, hosts: list[str], *, status_filter: str | None = None
+    ) -> dict[str, list[VMInfo] | str]:
         """
         List virtual machines on specified hosts.
         Queries all hosts concurrently for better performance.
@@ -217,7 +220,7 @@ class KVMCloneClient:
         Returns:
             Dict mapping host names to either lists of VM information or error strings
         """
-        async def query_host(host: str) -> tuple[str, Union[List[VMInfo], str]]:
+        async def query_host(host: str) -> tuple[str, list[VMInfo] | str]:
             """Query a single host and return result."""
             try:
                 async with self.transport.connect(host) as conn:
@@ -236,7 +239,7 @@ class KVMCloneClient:
         results = dict(results_list)
         return results
 
-    def get_operation_status(self, operation_id: str) -> Optional[OperationStatus]:
+    def get_operation_status(self, operation_id: str) -> OperationStatus | None:
         """
         Get status of a specific operation.
 
@@ -264,7 +267,7 @@ class KVMCloneClient:
             return True
         return False
 
-    def cleanup_failed_operations(self) -> List[str]:
+    def cleanup_failed_operations(self) -> list[str]:
         """
         Clean up failed operations and return their IDs.
 

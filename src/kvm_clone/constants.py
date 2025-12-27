@@ -5,6 +5,8 @@ This module defines all magic numbers and configuration defaults used throughout
 the codebase, providing a single source of truth for common values.
 """
 
+from __future__ import annotations
+
 # Transfer defaults
 DEFAULT_BLOCK_SIZE = 4096  # bytes (4KB blocks)
 DEFAULT_NETWORK_SPEED_MBPS = 100  # MB/s

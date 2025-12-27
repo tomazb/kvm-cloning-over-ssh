@@ -4,8 +4,10 @@ Data models for KVM cloning operations.
 This module defines the data structures used throughout the KVM cloning system.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Union
+from typing import Any
 from datetime import datetime
 from enum import Enum
 
@@ -48,7 +50,7 @@ class DiskInfo:
     size: int  # bytes
     format: str
     target: str
-    backing_file: Optional[str] = None
+    backing_file: str | None = None
 
 
 @dataclass
@@ -58,8 +60,8 @@ class NetworkInfo:
     interface: str
     mac_address: str
     network: str
-    ip_address: Optional[str] = None
-    bridge: Optional[str] = None
+    ip_address: str | None = None
+    bridge: str | None = None
 
 
 @dataclass
@@ -71,36 +73,36 @@ class VMInfo:
     state: VMState
     memory: int  # MB
     vcpus: int
-    disks: List[DiskInfo]
-    networks: List[NetworkInfo]
+    disks: list[DiskInfo]
+    networks: list[NetworkInfo]
     host: str
     created: datetime
     last_modified: datetime
-    config_path: Optional[str] = None
+    config_path: str | None = None
 
 
 @dataclass
 class CloneOptions:
     """Options for cloning operations."""
 
-    new_name: Optional[str] = None
+    new_name: str | None = None
     force: bool = False
     dry_run: bool = False
     parallel: int = DEFAULT_PARALLEL_TRANSFERS
     compress: bool = False
     verify: bool = True
     preserve_mac: bool = False
-    network_config: Optional[Dict[str, Any]] = None
+    network_config: dict[str, Any] | None = None
 
 
 @dataclass
 class SyncOptions:
     """Options for sync operations."""
 
-    target_name: Optional[str] = None
+    target_name: str | None = None
     checkpoint: bool = False
     delta_only: bool = True
-    bandwidth_limit: Optional[str] = None
+    bandwidth_limit: str | None = None
     allow_disk_mismatch: bool = False  # Allow sync despite disk count mismatch
     parallel: int = DEFAULT_PARALLEL_TRANSFERS  # Number of parallel disk transfers
 
@@ -115,10 +117,10 @@ class ProgressInfo:
     bytes_transferred: int
     total_bytes: int
     speed: float  # bytes/sec
-    eta: Optional[int]  # seconds
+    eta: int | None  # seconds
     status: OperationStatusEnum
-    message: Optional[str] = None
-    current_file: Optional[str] = None
+    message: str | None = None
+    current_file: str | None = None
 
 
 @dataclass
@@ -126,8 +128,8 @@ class ValidationResult:
     """Result of prerequisite validation."""
 
     valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -142,9 +144,9 @@ class CloneResult:
     dest_host: str
     duration: float  # seconds
     bytes_transferred: int
-    error: Optional[str] = None
-    warnings: List[str] = field(default_factory=list)
-    validation: Optional[ValidationResult] = None
+    error: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    validation: ValidationResult | None = None
 
 
 @dataclass
@@ -159,8 +161,8 @@ class SyncResult:
     duration: float  # seconds
     bytes_transferred: int
     blocks_synchronized: int
-    error: Optional[str] = None
-    warnings: List[str] = field(default_factory=list)
+    error: str | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -170,7 +172,7 @@ class DeltaInfo:
     total_size: int
     changed_size: int
     changed_blocks: int
-    files_changed: List[str]
+    files_changed: list[str]
     estimated_transfer_time: float
 
 
@@ -181,12 +183,12 @@ class OperationStatus:
     operation_id: str
     operation_type: OperationType
     status: OperationStatusEnum
-    progress: Optional[ProgressInfo] = None
-    result: Optional[Union[CloneResult, SyncResult]] = None
+    progress: ProgressInfo | None = None
+    result: CloneResult | SyncResult | None = None
     created: datetime = field(default_factory=datetime.now)
-    started: Optional[datetime] = None
-    completed: Optional[datetime] = None
-    error: Optional[str] = None
+    started: datetime | None = None
+    completed: datetime | None = None
+    error: str | None = None
 
 
 @dataclass
@@ -195,8 +197,8 @@ class SSHConnectionInfo:
 
     host: str
     port: int = 22
-    username: Optional[str] = None
-    key_path: Optional[str] = None
+    username: str | None = None
+    key_path: str | None = None
     timeout: int = 30
 
 
@@ -206,8 +208,8 @@ class TransferStats:
 
     bytes_transferred: int = 0
     files_transferred: int = 0
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     average_speed: float = 0.0  # bytes/sec
     peak_speed: float = 0.0  # bytes/sec
 

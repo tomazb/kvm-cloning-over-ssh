@@ -1,5 +1,7 @@
 """KVM Clone - A utility for cloning KVM virtual machines over SSH."""
 
+from __future__ import annotations
+
 __version__ = "0.1.0"
 __author__ = "tomaz"
 __description__ = "KVM cloning utility"

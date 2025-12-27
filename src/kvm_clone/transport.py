@@ -4,10 +4,12 @@ SSH transport layer for KVM cloning operations.
 This module handles SSH connections and secure data transfer between hosts.
 """
 
+from __future__ import annotations
+
 import asyncio
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Dict, Callable, AsyncIterator
+from collections.abc import Callable, AsyncIterator
 from pathlib import Path
 from datetime import datetime
 import paramiko
@@ -28,10 +30,10 @@ class SSHConnection:
         self,
         host: str,
         port: int = 22,
-        username: Optional[str] = None,
-        key_path: Optional[str] = None,
+        username: str | None = None,
+        key_path: str | None = None,
         timeout: int = 30,
-        executor: Optional[ThreadPoolExecutor] = None,
+        executor: ThreadPoolExecutor | None = None,
     ):
         """Initialize SSH connection."""
         self.host = host
@@ -40,8 +42,8 @@ class SSHConnection:
         self.key_path = key_path
         self.timeout = timeout
         self._executor = executor
-        self.client: Optional[paramiko.SSHClient] = None
-        self.sftp: Optional[paramiko.SFTPClient] = None
+        self.client: paramiko.SSHClient | None = None
+        self.sftp: paramiko.SFTPClient | None = None
         self._created_at: float = asyncio.get_event_loop().time()
         self._last_used: float = self._created_at
 
@@ -141,7 +143,7 @@ class SSHConnection:
             raise ConnectionError(str(e), self.host) from e
 
     async def execute_command(
-        self, command: str, timeout: Optional[int] = None
+        self, command: str, timeout: int | None = None
     ) -> tuple[str, str, int]:
         """Execute a command over SSH."""
         if not self.client:
@@ -193,7 +195,7 @@ class SSHConnection:
         self,
         local_path: str,
         remote_path: str,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> TransferStats:
         """Transfer a file to the remote host."""
         if not self.sftp:
@@ -268,7 +270,7 @@ class SSHTransport:
 
     def __init__(
         self,
-        key_path: Optional[str] = None,
+        key_path: str | None = None,
         timeout: int = 30,
         connection_ttl: int = DEFAULT_CONNECTION_TTL,
         max_connections: int = DEFAULT_MAX_CONNECTIONS,
@@ -293,7 +295,7 @@ class SSHTransport:
 
     @asynccontextmanager
     async def connect(
-        self, host: str, port: int = 22, username: Optional[str] = None
+        self, host: str, port: int = 22, username: str | None = None
     ) -> AsyncIterator[SSHConnection]:
         """Create a managed SSH connection."""
         connection_key = f"{host}:{port}"
@@ -373,8 +375,8 @@ class SSHTransport:
         host: str,
         command: str,
         port: int = 22,
-        username: Optional[str] = None,
-        timeout: Optional[int] = None,
+        username: str | None = None,
+        timeout: int | None = None,
     ) -> tuple[str, str, int]:
         """Execute a command on a remote host."""
         async with self.connect(host, port, username) as conn:
@@ -386,8 +388,8 @@ class SSHTransport:
         local_path: str,
         remote_path: str,
         port: int = 22,
-        username: Optional[str] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
+        username: str | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> TransferStats:
         """Transfer a file to a remote host."""
         async with self.connect(host, port, username) as conn:
@@ -403,7 +405,7 @@ class SSHTransport:
 
     def get_connection_info(
         self, host: str, port: int = 22
-    ) -> Optional[SSHConnectionInfo]:
+    ) -> SSHConnectionInfo | None:
         """Get connection information for a host."""
         connection_key = f"{host}:{port}"
         if connection_key in self.connections:

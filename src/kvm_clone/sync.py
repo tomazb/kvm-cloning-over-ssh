@@ -4,10 +4,12 @@ VM synchronization operations.
 This module handles VM synchronization (incremental updates) between hosts.
 """
 
+from __future__ import annotations
+
 import asyncio
 import shlex
 import uuid
-from typing import Optional, Callable, Dict
+from collections.abc import Callable
 from datetime import datetime
 
 from .models import (
@@ -41,7 +43,7 @@ class VMSynchronizer:
         dest_host: str,
         vm_name: str,
         sync_options: SyncOptions,
-        progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
+        progress_callback: Callable[[ProgressInfo], None] | None = None,
     ) -> SyncResult:
         """
         Synchronize a virtual machine between hosts.
@@ -210,7 +212,7 @@ class VMSynchronizer:
         source_host: str,
         dest_host: str,
         source_vm_name: str,
-        dest_vm_name: Optional[str] = None,
+        dest_vm_name: str | None = None,
     ) -> DeltaInfo:
         """
         Calculate differences between source and destination VMs.
@@ -304,7 +306,7 @@ class VMSynchronizer:
             logger.error(f"Failed to calculate delta: {e}", exc_info=True)
             raise TransferError(str(e), source_host, dest_host) from e
 
-    def _parse_rsync_stats(self, rsync_output: str) -> Dict[str, int]:
+    def _parse_rsync_stats(self, rsync_output: str) -> dict[str, int]:
         """Parse rsync --stats output to extract transfer information.
 
         Args:
@@ -393,7 +395,7 @@ class VMSynchronizer:
         source_path: str,
         dest_path: str,
         sync_options: SyncOptions,
-        progress_callback: Optional[Callable[[ProgressInfo], None]],
+        progress_callback: Callable[[ProgressInfo], None] | None,
         operation_id: str,
     ) -> dict:
         """
@@ -464,7 +466,7 @@ class VMSynchronizer:
         except Exception as e:
             raise TransferError(str(e), source_host, dest_host) from e
 
-    def _parse_rsync_transfer_stats(self, rsync_output: str) -> Dict[str, int]:
+    def _parse_rsync_transfer_stats(self, rsync_output: str) -> dict[str, int]:
         """Parse rsync verbose output for transfer statistics.
 
         Args:

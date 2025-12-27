@@ -5,7 +5,8 @@ This module provides helper functions for creating ProgressInfo objects,
 eliminating code duplication between cloner and sync operations.
 """
 
-from typing import Optional
+from __future__ import annotations
+
 from .models import ProgressInfo, OperationType, OperationStatusEnum
 
 
@@ -15,8 +16,8 @@ def create_progress_info(
     progress_percent: float,
     bytes_transferred: int,
     total_bytes: int,
-    current_file: Optional[str] = None,
-    message: Optional[str] = None,
+    current_file: str | None = None,
+    message: str | None = None,
     speed: float = 0.0,
     status: OperationStatusEnum = OperationStatusEnum.RUNNING,
 ) -> ProgressInfo:

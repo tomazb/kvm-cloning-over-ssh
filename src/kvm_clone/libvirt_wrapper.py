@@ -11,7 +11,7 @@ import random
 import shlex
 import uuid
 import xml.etree.ElementTree as ET
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
@@ -30,10 +30,10 @@ from .constants import LIBVIRT_MAC_PREFIX, DEFAULT_DISK_POOL_PATH
 
 # Module-level constant: libvirt state to VMState mapping
 # Built lazily to avoid errors when libvirt is not installed (e.g., during testing)
-LIBVIRT_STATE_MAP: Dict[int, VMState] = {}
+LIBVIRT_STATE_MAP: dict[int, VMState] = {}
 
 
-def _init_libvirt_state_map() -> Dict[int, VMState]:
+def _init_libvirt_state_map() -> dict[int, VMState]:
     """Initialize libvirt state map lazily."""
     global LIBVIRT_STATE_MAP
     if libvirt is not None and not LIBVIRT_STATE_MAP:
@@ -58,11 +58,11 @@ class LibvirtWrapper:
         Args:
             connection_ttl: Connection time-to-live in seconds (default: 5 minutes)
         """
-        self._connections: Dict[str, Any] = {}
-        self._connection_timestamps: Dict[str, float] = {}
+        self._connections: dict[str, Any] = {}
+        self._connection_timestamps: dict[str, float] = {}
         self._connection_ttl = connection_ttl
         # Cache: host -> (timestamp, total_cpu_time, active_cpu_time)
-        self._cpu_stats_cache: Dict[str, tuple[float, int, int]] = {}
+        self._cpu_stats_cache: dict[str, tuple[float, int, int]] = {}
 
     async def connect_to_host(self, ssh_conn: SSHConnection) -> Any:
         """Connect to libvirt on a remote host via SSH."""
@@ -124,8 +124,8 @@ class LibvirtWrapper:
             raise ConnectionError(str(e), ssh_conn.host)
 
     async def list_vms(
-        self, ssh_conn: SSHConnection, status_filter: Optional[str] = None
-    ) -> List[VMInfo]:
+        self, ssh_conn: SSHConnection, status_filter: str | None = None
+    ) -> list[VMInfo]:
         """List VMs on a host."""
         try:
             conn = await self.connect_to_host(ssh_conn)

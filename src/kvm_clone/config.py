@@ -4,9 +4,10 @@ Configuration management for KVM cloning operations.
 This module handles loading and validating configuration from files and environment variables.
 """
 
+from __future__ import annotations
+
 import os
 import yaml
-from typing import Optional
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from .exceptions import ConfigurationError
@@ -19,14 +20,14 @@ class AppConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")  # Reject unknown fields
 
-    ssh_key_path: Optional[str] = None
+    ssh_key_path: str | None = None
     default_timeout: int = Field(
         default=DEFAULT_OPERATION_TIMEOUT,  # 3600 seconds (1 hour) for VM operations
         gt=0,
         description="Default operation timeout in seconds",
     )
     log_level: str = Field(default="INFO", description="Logging level")
-    known_hosts_file: Optional[str] = None
+    known_hosts_file: str | None = None
 
     # Default values for operations
     default_parallel_transfers: int = Field(
@@ -35,7 +36,7 @@ class AppConfig(BaseModel):
         le=32,  # Add upper bound validation
         description="Number of parallel transfers",
     )
-    default_bandwidth_limit: Optional[str] = Field(default=None, pattern=r"^\d+[KMG]?$")
+    default_bandwidth_limit: str | None = Field(default=None, pattern=r"^\d+[KMG]?$")
 
     @field_validator("log_level")
     @classmethod
@@ -54,7 +55,7 @@ class ConfigLoader:
     def __init__(self) -> None:
         self.logger = logger
 
-    def load_config(self, config_path: Optional[str] = None) -> AppConfig:
+    def load_config(self, config_path: str | None = None) -> AppConfig:
         """
         Load configuration from file.
 

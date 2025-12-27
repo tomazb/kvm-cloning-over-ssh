@@ -5,10 +5,12 @@ This module provides input validation, command sanitization, and path security
 functions to prevent common security vulnerabilities.
 """
 
+from __future__ import annotations
+
 import re
 import shlex
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import Any
 
 from .exceptions import ValidationError
 
@@ -103,7 +105,7 @@ class SecurityValidator:
         return name
 
     @staticmethod
-    def sanitize_path(path: str, base_dir: Optional[str] = None) -> str:
+    def sanitize_path(path: str, base_dir: str | None = None) -> str:
         """
         Sanitize and validate file path to prevent path traversal attacks.
 
@@ -180,9 +182,9 @@ class CommandBuilder:
     def build_rsync_command(
         source_path: str,
         dest_path: str,
-        dest_host: Optional[str] = None,
-        bandwidth_limit: Optional[str] = None,
-        additional_options: Optional[List[str]] = None,
+        dest_host: str | None = None,
+        bandwidth_limit: str | None = None,
+        additional_options: list[str] | None = None,
     ) -> str:
         """
         Build a safe rsync command.
@@ -279,8 +281,8 @@ class KnownHostsPolicy:
 
     def __init__(
         self,
-        known_hosts_file: Optional[str] = None,
-        trusted_hosts: Optional[set] = None,
+        known_hosts_file: str | None = None,
+        trusted_hosts: set | None = None,
     ):
         """
         Initialize the known hosts policy.
@@ -352,13 +354,13 @@ class SSHSecurity:
     """SSH security utilities."""
 
     # Shared policy instance for session-based trust
-    _policy: Optional[KnownHostsPolicy] = None
+    _policy: KnownHostsPolicy | None = None
 
     @classmethod
     def get_known_hosts_policy(
         cls,
-        known_hosts_file: Optional[str] = None,
-        trusted_hosts: Optional[set] = None,
+        known_hosts_file: str | None = None,
+        trusted_hosts: set | None = None,
     ) -> KnownHostsPolicy:
         """
         Get a secure SSH host key policy.
