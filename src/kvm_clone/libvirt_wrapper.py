@@ -61,7 +61,8 @@ class LibvirtWrapper:
         self._connections: Dict[str, Any] = {}
         self._connection_timestamps: Dict[str, float] = {}
         self._connection_ttl = connection_ttl
-        self._cpu_stats_cache: Dict[str, tuple[float, float]] = {}  # host -> (time, cpu_time)
+        # Cache: host -> (timestamp, total_cpu_time, active_cpu_time)
+        self._cpu_stats_cache: Dict[str, tuple[float, int, int]] = {}
 
     async def connect_to_host(self, ssh_conn: SSHConnection) -> Any:
         """Connect to libvirt on a remote host via SSH."""
@@ -370,27 +371,40 @@ class LibvirtWrapper:
             free_memory = mem_stats.get("free", 0) // 1024
 
             # Get CPU usage using caching mechanism
+            # getCPUStats(VIR_NODE_CPU_STATS_ALL_CPUS) returns dict with keys:
+            # 'kernel', 'user', 'idle', 'iowait' - all in nanoseconds
             cpu_usage = 0.0
             try:
                 cpu_stats = conn.getCPUStats(libvirt.VIR_NODE_CPU_STATS_ALL_CPUS)
-                if cpu_stats and "cpu_time" in cpu_stats:
+                if cpu_stats:
+                    # Get the individual CPU time components (nanoseconds)
+                    kernel = cpu_stats.get("kernel", 0)
+                    user = cpu_stats.get("user", 0)
+                    idle = cpu_stats.get("idle", 0)
+                    iowait = cpu_stats.get("iowait", 0)
+                    
+                    # Total CPU time = sum of all components
+                    total_cpu_time = kernel + user + idle + iowait
+                    # Active CPU time = kernel + user (non-idle)
+                    active_cpu_time = kernel + user
+                    
                     current_time = asyncio.get_event_loop().time()
-                    current_cpu_time = cpu_stats["cpu_time"]  # nanoseconds
-
                     host = ssh_conn.host
+                    
                     if host in self._cpu_stats_cache:
-                        prev_time, prev_cpu_time = self._cpu_stats_cache[host]
+                        prev_time, prev_total, prev_active = self._cpu_stats_cache[host]
                         time_delta = current_time - prev_time  # seconds
-                        cpu_delta = (current_cpu_time - prev_cpu_time) / 1e9  # convert ns to seconds
+                        total_delta = total_cpu_time - prev_total
+                        active_delta = active_cpu_time - prev_active
 
-                        if time_delta > 0:
-                            # CPU usage = (cpu_time_delta / (time_delta * num_cpus)) * 100
-                            cpu_count = node_info[2]
-                            cpu_usage = (cpu_delta / (time_delta * cpu_count)) * 100
+                        if time_delta > 0 and total_delta > 0:
+                            # CPU usage = (active_time / total_time) * 100
+                            cpu_usage = (active_delta / total_delta) * 100
                             # Clamp to reasonable range [0, 100]
                             cpu_usage = max(0.0, min(100.0, cpu_usage))
 
-                    self._cpu_stats_cache[host] = (current_time, current_cpu_time)
+                    # Cache: (time, total_cpu_time, active_cpu_time)
+                    self._cpu_stats_cache[host] = (current_time, total_cpu_time, active_cpu_time)
             except (libvirt.libvirtError, AttributeError, KeyError) as e:
                 logger.debug(f"Could not get CPU stats for {ssh_conn.host}: {e}")
                 cpu_usage = 0.0
