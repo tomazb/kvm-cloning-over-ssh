@@ -343,6 +343,6 @@ class VMCloner:
             return dest_path
 
         except ValidationError as e:
-            raise TransferError(f"Validation error: {e}", source_host, dest_host)
+            raise TransferError(f"Validation error: {e}", source_host, dest_host) from e
         except Exception as e:
-            raise TransferError(str(e), source_host, dest_host)
+            raise TransferError(str(e), source_host, dest_host) from e

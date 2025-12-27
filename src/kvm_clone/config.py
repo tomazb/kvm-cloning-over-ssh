@@ -104,20 +104,20 @@ class ConfigLoader:
                 path=path,
                 exc_info=True,
             )
-            raise ConfigurationError(f"Failed to parse configuration file: {e}")
+            raise ConfigurationError(f"Failed to parse configuration file: {e}") from e
         except ValueError as e:
             # Pydantic validation error
             self.logger.error(
                 f"Invalid configuration in {path}: {e}", path=path, exc_info=True
             )
-            raise ConfigurationError(f"Invalid configuration: {e}")
+            raise ConfigurationError(f"Invalid configuration: {e}") from e
         except Exception as e:
             self.logger.error(
                 f"Failed to load configuration from {path}: {e}",
                 path=path,
                 exc_info=True,
             )
-            raise ConfigurationError(f"Failed to load configuration: {e}")
+            raise ConfigurationError(f"Failed to load configuration: {e}") from e
 
 
 # Global config loader

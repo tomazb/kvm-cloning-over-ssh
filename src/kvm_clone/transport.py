@@ -126,19 +126,19 @@ class SSHConnection:
                 host=self.host,
                 exc_info=True,
             )
-            raise AuthenticationError(str(e), self.host)
+            raise AuthenticationError(str(e), self.host) from e
         except paramiko.SSHException as e:
             logger.error(
                 f"SSH error connecting to {self.host}: {e}",
                 host=self.host,
                 exc_info=True,
             )
-            raise SSHError(str(e), self.host, "connection")
+            raise SSHError(str(e), self.host, "connection") from e
         except Exception as e:
             logger.error(
                 f"Connection error to {self.host}: {e}", host=self.host, exc_info=True
             )
-            raise ConnectionError(str(e), self.host)
+            raise ConnectionError(str(e), self.host) from e
 
     async def execute_command(
         self, command: str, timeout: Optional[int] = None
@@ -187,7 +187,7 @@ class SSHConnection:
                 command=command,
                 exc_info=True,
             )
-            raise SSHError(str(e), self.host, "command_execution")
+            raise SSHError(str(e), self.host, "command_execution") from e
 
     async def transfer_file(
         self,
@@ -248,7 +248,7 @@ class SSHConnection:
                 remote_path=remote_path,
                 exc_info=True,
             )
-            raise SSHError(str(e), self.host, "file_transfer")
+            raise SSHError(str(e), self.host, "file_transfer") from e
 
     async def close(self) -> None:
         """Close SSH connection."""

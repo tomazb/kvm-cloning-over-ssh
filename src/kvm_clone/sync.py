@@ -291,7 +291,7 @@ class VMSynchronizer:
             raise
         except Exception as e:
             logger.error(f"Failed to calculate delta: {e}", exc_info=True)
-            raise TransferError(str(e), source_host, dest_host)
+            raise TransferError(str(e), source_host, dest_host) from e
 
     def _parse_rsync_stats(self, rsync_output: str) -> Dict[str, int]:
         """Parse rsync --stats output to extract transfer information.
@@ -451,7 +451,7 @@ class VMSynchronizer:
         except (ValidationError, TransferError):
             raise
         except Exception as e:
-            raise TransferError(str(e), source_host, dest_host)
+            raise TransferError(str(e), source_host, dest_host) from e
 
     def _parse_rsync_transfer_stats(self, rsync_output: str) -> Dict[str, int]:
         """Parse rsync verbose output for transfer statistics.
