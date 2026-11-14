@@ -1,9 +1,10 @@
 """Comprehensive unit tests for configuration management."""
 
-import pytest
-import tempfile
 import os
-from unittest.mock import patch, mock_open
+import tempfile
+from unittest.mock import mock_open, patch
+
+import pytest
 
 from kvm_clone.config import AppConfig, ConfigLoader, config_loader
 from kvm_clone.exceptions import ConfigurationError
@@ -171,11 +172,13 @@ log_level: ERROR
         def mock_exists(path):
             return path == "config.yaml"
 
-        with patch("os.path.exists", side_effect=mock_exists):
-            with patch("builtins.open", mock_open(read_data=yaml_content)):
-                config = loader.load_config()
-                assert config.default_timeout == 90
-                assert config.log_level == "ERROR"
+        with (
+            patch("os.path.exists", side_effect=mock_exists),
+            patch("builtins.open", mock_open(read_data=yaml_content)),
+        ):
+            config = loader.load_config()
+            assert config.default_timeout == 90
+            assert config.log_level == "ERROR"
 
     def test_load_config_with_empty_file(self):
         """Test load_config handles empty YAML file."""

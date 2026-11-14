@@ -1,7 +1,8 @@
 """Unit tests for sync module functionality."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from kvm_clone.sync import VMSynchronizer
 

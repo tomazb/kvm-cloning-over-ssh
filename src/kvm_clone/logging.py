@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import Any
 from datetime import datetime, timezone
+from typing import Any, ClassVar
 
 
 class StructuredLogger:
@@ -26,7 +26,7 @@ class StructuredLogger:
 
     class JsonFormatter(logging.Formatter):
         # Standard LogRecord attributes that should not be included as extra fields
-        STANDARD_ATTRS = {
+        STANDARD_ATTRS: ClassVar[set[str]] = {
             "name",
             "msg",
             "args",
@@ -75,6 +75,10 @@ class StructuredLogger:
 
     def error(self, message: str, exc_info: bool = False, **kwargs: Any) -> None:
         self.logger.error(message, exc_info=exc_info, extra=kwargs)
+
+    def exception(self, message: str, **kwargs: Any) -> None:
+        """Log an error together with the active exception traceback."""
+        self.logger.exception(message, extra=kwargs)
 
     def warning(self, message: str, **kwargs: Any) -> None:
         self.logger.warning(message, extra=kwargs)

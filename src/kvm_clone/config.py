@@ -7,12 +7,13 @@ This module handles loading and validating configuration from files and environm
 from __future__ import annotations
 
 import os
-import yaml
-from pydantic import BaseModel, Field, field_validator, ConfigDict
 
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .constants import DEFAULT_OPERATION_TIMEOUT, DEFAULT_PARALLEL_TRANSFERS
 from .exceptions import ConfigurationError
 from .logging import logger
-from .constants import DEFAULT_OPERATION_TIMEOUT, DEFAULT_PARALLEL_TRANSFERS
 
 
 class AppConfig(BaseModel):
@@ -100,23 +101,19 @@ class ConfigLoader:
             return AppConfig(**data)
 
         except yaml.YAMLError as e:
-            self.logger.error(
-                f"Failed to parse configuration file {path}: {e}",
+            self.logger.exception(
+                f"Failed to parse configuration file {path}",
                 path=path,
-                exc_info=True,
             )
             raise ConfigurationError(f"Failed to parse configuration file: {e}") from e
         except ValueError as e:
             # Pydantic validation error
-            self.logger.error(
-                f"Invalid configuration in {path}: {e}", path=path, exc_info=True
-            )
+            self.logger.exception(f"Invalid configuration in {path}", path=path)
             raise ConfigurationError(f"Invalid configuration: {e}") from e
         except OSError as e:
-            self.logger.error(
-                f"Failed to load configuration from {path}: {e}",
+            self.logger.exception(
+                f"Failed to load configuration from {path}",
                 path=path,
-                exc_info=True,
             )
             raise ConfigurationError(f"Failed to load configuration: {e}") from e
 

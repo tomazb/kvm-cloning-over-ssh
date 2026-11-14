@@ -13,26 +13,26 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from .exceptions import (
+    KVMCloneError,
+    LibvirtError,
+    TransferError,
+    ValidationError,
+    VMNotFoundError,
+)
+from .libvirt_wrapper import LibvirtWrapper
 from .logging import logger
 from .models import (
     CloneOptions,
     CloneResult,
+    DiskInfo,
+    OperationType,
     ProgressInfo,
     ValidationResult,
-    OperationType,
-    OperationStatusEnum,
 )
-from .exceptions import (
-    VMNotFoundError,
-    TransferError,
-    ValidationError,
-    LibvirtError,
-    KVMCloneError,
-)
-from .transport import SSHTransport
-from .libvirt_wrapper import LibvirtWrapper
-from .security import SecurityValidator, CommandBuilder
 from .progress import create_disk_progress_info
+from .security import CommandBuilder, SecurityValidator
+from .transport import SSHTransport
 
 
 class VMCloner:
@@ -130,14 +130,14 @@ class VMCloner:
                 )
 
                 # Transfer disk images and collect path mappings
-                # Calculate total bytes for progress tracking
-                total_bytes = sum(disk.size for disk in vm_info.disks)
                 disk_path_mappings = {}  # old_path -> new_path mapping
 
                 # Use semaphore for parallel transfers with concurrency limit
                 semaphore = asyncio.Semaphore(clone_options.parallel)
 
-                async def transfer_disk_with_limit(index: int, disk):
+                async def transfer_disk_with_limit(
+                    index: int, disk: DiskInfo
+                ) -> tuple[str, str, int]:
                     """Transfer a single disk with semaphore limiting."""
                     async with semaphore:
                         if progress_callback:
@@ -290,7 +290,7 @@ class VMCloner:
                 # Check destination resources
                 try:
                     resources = await self.libvirt.get_host_resources(dest_conn)
-                    
+
                     # Validate memory: VM memory (MB) vs available memory (MB)
                     if vm_info is not None:
                         if resources.available_memory < vm_info.memory:
@@ -299,12 +299,12 @@ class VMCloner:
                                 f"available {resources.available_memory}MB, "
                                 f"required {vm_info.memory}MB"
                             )
-                        
+
                         # Validate disk space: disk sizes (bytes) vs available disk (bytes)
                         total_disk_required = sum(disk.size for disk in vm_info.disks)
                         if resources.available_disk < total_disk_required:
-                            available_gb = resources.available_disk / (1024 ** 3)
-                            required_gb = total_disk_required / (1024 ** 3)
+                            available_gb = resources.available_disk / (1024**3)
+                            required_gb = total_disk_required / (1024**3)
                             errors.append(
                                 f"Insufficient disk space on destination: "
                                 f"available {available_gb:.1f}GB, "
@@ -370,7 +370,7 @@ class VMCloner:
                         dest_host=dest_host,
                     )
 
-                stdout, stderr, exit_code = await source_conn.execute_command(command)
+                _stdout, stderr, exit_code = await source_conn.execute_command(command)
 
                 if exit_code != 0:
                     raise TransferError(

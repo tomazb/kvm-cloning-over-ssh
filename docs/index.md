@@ -103,6 +103,7 @@ make docs
 import asyncio
 from kvm_clone import KVMCloneClient
 
+
 async def clone_vm():
     async with KVMCloneClient() as client:
         result = await client.clone_vm(
@@ -111,13 +112,14 @@ async def clone_vm():
             vm_name="my-vm",
             new_name="my-vm-clone",
             compress=True,
-            verify=True
+            verify=True,
         )
-        
+
         if result.success:
             print(f"Successfully cloned VM: {result.new_vm_name}")
         else:
             print(f"Clone failed: {result.error}")
+
 
 asyncio.run(clone_vm())
 ```

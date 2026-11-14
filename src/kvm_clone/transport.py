@@ -8,18 +8,25 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
+from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
-from collections.abc import Callable, AsyncIterator
-from pathlib import Path
-from datetime import datetime
-import paramiko
 from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
 
-from .logging import logger
+import paramiko
+
 from .constants import DEFAULT_CONNECTION_TTL, DEFAULT_MAX_CONNECTIONS
-
+from .exceptions import (
+    AuthenticationError,
+    ConnectionError,
+    SSHError,
+)
+from .exceptions import (
+    TimeoutError as OperationTimeoutError,
+)
+from .logging import logger
 from .models import SSHConnectionInfo, TransferStats
-from .exceptions import SSHError, AuthenticationError, ConnectionError, TimeoutError
 from .security import SSHSecurity
 
 
@@ -152,7 +159,7 @@ class SSHConnection:
         try:
             loop = asyncio.get_event_loop()
             executor = self._executor or None
-            stdin, stdout, stderr = await loop.run_in_executor(
+            _stdin, stdout, stderr = await loop.run_in_executor(
                 executor, self.client.exec_command, command
             )
 
@@ -172,14 +179,14 @@ class SSHConnection:
 
             return (stdout_data.decode("utf-8"), stderr_data.decode("utf-8"), exit_code)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
                 f"Command execution timed out on {self.host}",
                 host=self.host,
                 command=command,
                 timeout=cmd_timeout,
             )
-            raise TimeoutError(
+            raise OperationTimeoutError(
                 "Command execution timed out", "command_execution", cmd_timeout
             )
         except (paramiko.SSHException, OSError) as e:
@@ -214,8 +221,6 @@ class SSHConnection:
             file_size = local_file.stat().st_size
 
             # Transfer file
-            from datetime import datetime
-
             stats = TransferStats()
             stats.start_time = datetime.now()
 

@@ -8,26 +8,25 @@ from __future__ import annotations
 
 import asyncio
 import re
-import shlex
 import uuid
 from collections.abc import Callable
 from datetime import datetime
 
+from .constants import DEFAULT_BLOCK_SIZE, DEFAULT_NETWORK_SPEED_BYTES
+from .exceptions import KVMCloneError, TransferError, ValidationError, VMNotFoundError
+from .libvirt_wrapper import LibvirtWrapper
+from .logging import logger
 from .models import (
+    DeltaInfo,
+    DiskInfo,
+    OperationType,
+    ProgressInfo,
     SyncOptions,
     SyncResult,
-    ProgressInfo,
-    DeltaInfo,
-    OperationType,
-    OperationStatusEnum,
 )
-from .exceptions import VMNotFoundError, TransferError, ValidationError, KVMCloneError
-from .transport import SSHTransport
-from .libvirt_wrapper import LibvirtWrapper
-from .security import SecurityValidator, CommandBuilder
-from .logging import logger
-from .constants import DEFAULT_BLOCK_SIZE, DEFAULT_NETWORK_SPEED_BYTES
 from .progress import create_disk_progress_info
+from .security import CommandBuilder, SecurityValidator
+from .transport import SSHTransport
 
 
 class VMSynchronizer:
@@ -113,13 +112,12 @@ class VMSynchronizer:
                     )
 
             # Perform synchronization
-            # Calculate total bytes for progress tracking
-            total_bytes = sum(disk.size for disk in source_vm_info.disks)
-
             # Use semaphore for parallel transfers with concurrency limit
             semaphore = asyncio.Semaphore(sync_options.parallel)
 
-            async def sync_disk_with_limit(index: int, source_disk, dest_disk):
+            async def sync_disk_with_limit(
+                index: int, source_disk: DiskInfo, dest_disk: DiskInfo
+            ) -> dict[str, int]:
                 """Sync a single disk with semaphore limiting."""
                 async with semaphore:
                     if progress_callback:
@@ -154,10 +152,7 @@ class VMSynchronizer:
             ]
 
             # Sync all disks in parallel with concurrency limit
-            tasks = [
-                sync_disk_with_limit(i, src, dst)
-                for i, src, dst in disk_pairs
-            ]
+            tasks = [sync_disk_with_limit(i, src, dst) for i, src, dst in disk_pairs]
             results = await asyncio.gather(*tasks)
 
             # Aggregate results
@@ -260,11 +255,15 @@ class VMSynchronizer:
                         )
 
                         async with self.transport.connect(source_host) as conn:
-                            stdout, stderr, exit_code = await conn.execute_command(rsync_cmd)
+                            stdout, _stderr, _exit_code = await conn.execute_command(
+                                rsync_cmd
+                            )
 
                         # Parse rsync stats output
                         stats = self._parse_rsync_stats(stdout)
-                        disk_changed_size = stats.get("transferred_size", source_disk.size)
+                        disk_changed_size = stats.get(
+                            "transferred_size", source_disk.size
+                        )
                         changed_size += disk_changed_size
                         changed_blocks += disk_changed_size // DEFAULT_BLOCK_SIZE
 
@@ -401,7 +400,7 @@ class VMSynchronizer:
                     "snapshot-create-as", vm_name, snapshot_name, "Pre-sync checkpoint"
                 )
 
-                stdout, stderr, exit_code = await conn.execute_command(command)
+                _stdout, stderr, exit_code = await conn.execute_command(command)
 
                 if exit_code != 0:
                     logger.warning(
@@ -422,7 +421,7 @@ class VMSynchronizer:
                 host=host,
                 vm_name=vm_name,
             )
-        except Exception as e:
+        except (KVMCloneError, OSError) as e:
             logger.warning(
                 f"Checkpoint creation failed: {e}",
                 host=host,
@@ -439,7 +438,7 @@ class VMSynchronizer:
         sync_options: SyncOptions,
         progress_callback: Callable[[ProgressInfo], None] | None,
         operation_id: str,
-    ) -> dict:
+    ) -> dict[str, int]:
         """
         Synchronize a single disk image.
 

@@ -7,7 +7,7 @@ eliminating code duplication between cloner and sync operations.
 
 from __future__ import annotations
 
-from .models import ProgressInfo, OperationType, OperationStatusEnum
+from .models import OperationStatusEnum, OperationType, ProgressInfo
 
 
 def create_progress_info(

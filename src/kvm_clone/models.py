@@ -7,9 +7,9 @@ This module defines the data structures used throughout the KVM cloning system.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from .constants import DEFAULT_PARALLEL_TRANSFERS
 

@@ -2,8 +2,8 @@
 
 import json
 import logging
-from io import StringIO
 from datetime import datetime
+from io import StringIO
 
 from kvm_clone.logging import StructuredLogger, logger
 
@@ -194,12 +194,12 @@ class TestStructuredLoggerMethods:
         assert data["level"] == "ERROR"
         assert data["message"] == "Error message"
 
-    def test_error_with_exc_info(self):
-        """Test error logging with exception info."""
+    def test_exception_method(self):
+        """Test exception logging includes the active traceback."""
         try:
             raise RuntimeError("Test error")
         except RuntimeError:
-            self.test_logger.error("Error occurred", exc_info=True)
+            self.test_logger.exception("Error occurred")
 
         data = self.get_log_output()
         assert data["level"] == "ERROR"
@@ -463,31 +463,37 @@ class TestLoggingHelperFunctions:
     def test_log_info_function_exists(self):
         """Test log_info function is importable and callable."""
         from kvm_clone.logging import log_info
+
         assert callable(log_info)
 
     def test_log_error_function_exists(self):
         """Test log_error function is importable and callable."""
         from kvm_clone.logging import log_error
+
         assert callable(log_error)
 
     def test_log_warning_function_exists(self):
         """Test log_warning function is importable and callable."""
         from kvm_clone.logging import log_warning
+
         assert callable(log_warning)
 
     def test_log_debug_function_exists(self):
         """Test log_debug function is importable and callable."""
         from kvm_clone.logging import log_debug
+
         assert callable(log_debug)
 
     def test_log_critical_function_exists(self):
         """Test log_critical function is importable and callable."""
         from kvm_clone.logging import log_critical
+
         assert callable(log_critical)
 
     def test_log_info_produces_json_output(self, capfd):
         """Test log_info produces structured JSON output."""
         from kvm_clone.logging import log_info
+
         log_info("Test info message", key="value")
         captured = capfd.readouterr()
         # Output goes to stdout
@@ -500,6 +506,7 @@ class TestLoggingHelperFunctions:
     def test_log_error_with_exc_info(self, capfd):
         """Test log_error supports exc_info parameter."""
         from kvm_clone.logging import log_error
+
         try:
             raise ValueError("test error")
         except ValueError:

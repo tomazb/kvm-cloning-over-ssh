@@ -11,8 +11,8 @@ import random
 import shlex
 import uuid
 import xml.etree.ElementTree as ET
-from typing import Any, TYPE_CHECKING
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import libvirt
@@ -22,11 +22,11 @@ else:
     except ImportError:
         libvirt = None  # type: ignore[assignment]
 
-from .models import VMInfo, DiskInfo, NetworkInfo, VMState, ResourceInfo
-from .exceptions import LibvirtError, VMNotFoundError, ConnectionError
-from .transport import SSHConnection
+from .constants import DEFAULT_DISK_POOL_PATH, LIBVIRT_MAC_PREFIX
+from .exceptions import ConnectionError, LibvirtError, VMNotFoundError
 from .logging import logger
-from .constants import LIBVIRT_MAC_PREFIX, DEFAULT_DISK_POOL_PATH
+from .models import DiskInfo, NetworkInfo, ResourceInfo, VMInfo, VMState
+from .transport import SSHConnection
 
 # Module-level constant: libvirt state to VMState mapping
 # Built lazily to avoid errors when libvirt is not installed (e.g., during testing)
@@ -176,7 +176,7 @@ class LibvirtWrapper:
         except libvirt.libvirtError as e:
             raise LibvirtError(str(e), "get_vm_info")
 
-    async def _get_vm_info(self, domain: "libvirt.virDomain", host: str) -> VMInfo:
+    async def _get_vm_info(self, domain: libvirt.virDomain, host: str) -> VMInfo:
         """Extract VM information from libvirt domain."""
         try:
             # Get basic info
@@ -382,15 +382,15 @@ class LibvirtWrapper:
                     user = cpu_stats.get("user", 0)
                     idle = cpu_stats.get("idle", 0)
                     iowait = cpu_stats.get("iowait", 0)
-                    
+
                     # Total CPU time = sum of all components
                     total_cpu_time = kernel + user + idle + iowait
                     # Active CPU time = kernel + user (non-idle)
                     active_cpu_time = kernel + user
-                    
+
                     current_time = asyncio.get_event_loop().time()
                     host = ssh_conn.host
-                    
+
                     if host in self._cpu_stats_cache:
                         prev_time, prev_total, prev_active = self._cpu_stats_cache[host]
                         time_delta = current_time - prev_time  # seconds
@@ -404,7 +404,11 @@ class LibvirtWrapper:
                             cpu_usage = max(0.0, min(100.0, cpu_usage))
 
                     # Cache: (time, total_cpu_time, active_cpu_time)
-                    self._cpu_stats_cache[host] = (current_time, total_cpu_time, active_cpu_time)
+                    self._cpu_stats_cache[host] = (
+                        current_time,
+                        total_cpu_time,
+                        active_cpu_time,
+                    )
             except (libvirt.libvirtError, AttributeError, KeyError) as e:
                 logger.debug(f"Could not get CPU stats for {ssh_conn.host}: {e}")
                 cpu_usage = 0.0
@@ -414,13 +418,13 @@ class LibvirtWrapper:
             available_disk = 0
             try:
                 df_command = f"df -B1 {shlex.quote(DEFAULT_DISK_POOL_PATH)}"
-                stdout, stderr, exit_code = await ssh_conn.execute_command(df_command)
+                stdout, _stderr, exit_code = await ssh_conn.execute_command(df_command)
 
                 if exit_code == 0:
                     # Parse df output:
                     # Filesystem 1K-blocks Used Available Use% Mounted on
                     # /dev/sda1  1234567890 987654321 123456789 80% /
-                    lines = stdout.strip().split('\n')
+                    lines = stdout.strip().split("\n")
                     if len(lines) >= 2:
                         parts = lines[1].split()
                         if len(parts) >= 4:

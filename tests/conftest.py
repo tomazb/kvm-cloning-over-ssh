@@ -1,8 +1,9 @@
 """Test configuration and fixtures for kvm-clone."""
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -34,7 +35,6 @@ def sample_vm_config():
 def mock_ssh_connection():
     """Mock SSH connection for testing without actual connections."""
     # This would be implemented with proper mocking in real tests
-    pass
 
 
 @pytest.fixture

@@ -1,8 +1,9 @@
 """Unit tests for core KVM cloning functionality."""
 
-import pytest
-from unittest.mock import AsyncMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from kvm_clone.client import KVMCloneClient
 from kvm_clone.models import CloneOptions, VMInfo, VMState
@@ -101,8 +102,8 @@ class TestCloningLogic:
     async def test_clone_preparation(self, temp_clone_config):
         """Test clone preparation steps."""
         from kvm_clone.cloner import VMCloner
-        from kvm_clone.transport import SSHTransport
         from kvm_clone.libvirt_wrapper import LibvirtWrapper
+        from kvm_clone.transport import SSHTransport
 
         transport = SSHTransport()
         libvirt = LibvirtWrapper()
@@ -136,7 +137,7 @@ class TestCloningLogic:
     @pytest.mark.unit
     def test_exception_handling(self):
         """Test custom exception creation."""
-        from kvm_clone.exceptions import VMNotFoundError, ConfigurationError
+        from kvm_clone.exceptions import ConfigurationError, VMNotFoundError
 
         vm_error = VMNotFoundError("test-vm", "localhost")
         assert vm_error.vm_name == "test-vm"
