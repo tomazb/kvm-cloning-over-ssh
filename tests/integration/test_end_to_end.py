@@ -1,6 +1,7 @@
 """Integration tests for KVM cloning over SSH."""
 
 import pytest
+
 from tests.conftest import spec
 
 

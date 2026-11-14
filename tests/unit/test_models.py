@@ -1,24 +1,25 @@
 """Comprehensive unit tests for data models."""
 
 from datetime import datetime
+
 from kvm_clone.models import (
-    VMState,
-    OperationType,
-    OperationStatusEnum,
+    CloneOptions,
+    CloneResult,
+    DeltaInfo,
     DiskInfo,
     NetworkInfo,
-    VMInfo,
-    CloneOptions,
-    SyncOptions,
-    ProgressInfo,
-    ValidationResult,
-    CloneResult,
-    SyncResult,
-    DeltaInfo,
     OperationStatus,
-    SSHConnectionInfo,
-    TransferStats,
+    OperationStatusEnum,
+    OperationType,
+    ProgressInfo,
     ResourceInfo,
+    SSHConnectionInfo,
+    SyncOptions,
+    SyncResult,
+    TransferStats,
+    ValidationResult,
+    VMInfo,
+    VMState,
 )
 
 

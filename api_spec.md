@@ -195,28 +195,28 @@ Main client class for interacting with the KVM cloning functionality.
 class KVMCloneClient:
     """
     Main client for KVM cloning operations.
-    
+
     Args:
         config (Optional[Dict[str, Any]]): Configuration dictionary
         ssh_key_path (Optional[str]): Path to SSH private key
         timeout (int): Default operation timeout in seconds
-        
+
     Attributes:
         config (Dict[str, Any]): Current configuration
         timeout (int): Operation timeout
-        
+
     Raises:
         ConfigurationError: If configuration is invalid
         ConnectionError: If unable to establish connections
     """
-    
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
         ssh_key_path: Optional[str] = None,
-        timeout: int = 3600
+        timeout: int = 3600,
     ) -> None: ...
-    
+
     def clone_vm(
         self,
         source_host: str,
@@ -231,9 +231,9 @@ class KVMCloneClient:
         verify: bool = True,
         preserve_mac: bool = False,
         network_config: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable[[ProgressInfo], None]] = None
+        progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
     ) -> CloneResult: ...
-    
+
     def sync_vm(
         self,
         source_host: str,
@@ -244,26 +244,17 @@ class KVMCloneClient:
         checkpoint: bool = False,
         delta_only: bool = True,
         bandwidth_limit: Optional[str] = None,
-        progress_callback: Optional[Callable[[ProgressInfo], None]] = None
+        progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
     ) -> SyncResult: ...
-    
+
     def list_vms(
-        self,
-        hosts: List[str],
-        *,
-        status_filter: Optional[str] = None
+        self, hosts: List[str], *, status_filter: Optional[str] = None
     ) -> Dict[str, List[VMInfo]]: ...
-    
-    def get_operation_status(
-        self,
-        operation_id: str
-    ) -> OperationStatus: ...
-    
-    def cancel_operation(
-        self,
-        operation_id: str
-    ) -> bool: ...
-    
+
+    def get_operation_status(self, operation_id: str) -> OperationStatus: ...
+
+    def cancel_operation(self, operation_id: str) -> bool: ...
+
     def cleanup_failed_operations(self) -> List[str]: ...
 ```
 
@@ -275,35 +266,30 @@ Handles the actual VM cloning process.
 class VMCloner:
     """
     Handles VM cloning operations.
-    
+
     Args:
         transport (SSHTransport): SSH transport instance
         libvirt_wrapper (LibvirtWrapper): Libvirt wrapper instance
-        
+
     Attributes:
         transport (SSHTransport): SSH transport
         libvirt (LibvirtWrapper): Libvirt wrapper
     """
-    
+
     def __init__(
-        self,
-        transport: SSHTransport,
-        libvirt_wrapper: LibvirtWrapper
+        self, transport: SSHTransport, libvirt_wrapper: LibvirtWrapper
     ) -> None: ...
-    
+
     async def clone(
         self,
         source_host: str,
         dest_host: str,
         vm_name: str,
-        clone_options: CloneOptions
+        clone_options: CloneOptions,
     ) -> CloneResult: ...
-    
+
     async def validate_prerequisites(
-        self,
-        source_host: str,
-        dest_host: str,
-        vm_name: str
+        self, source_host: str, dest_host: str, vm_name: str
     ) -> ValidationResult: ...
 ```
 
@@ -315,35 +301,26 @@ Handles VM synchronization operations.
 class VMSynchronizer:
     """
     Handles VM synchronization operations.
-    
+
     Args:
         transport (SSHTransport): SSH transport instance
         libvirt_wrapper (LibvirtWrapper): Libvirt wrapper instance
-        
+
     Attributes:
         transport (SSHTransport): SSH transport
         libvirt (LibvirtWrapper): Libvirt wrapper
     """
-    
+
     def __init__(
-        self,
-        transport: SSHTransport,
-        libvirt_wrapper: LibvirtWrapper
+        self, transport: SSHTransport, libvirt_wrapper: LibvirtWrapper
     ) -> None: ...
-    
+
     async def sync(
-        self,
-        source_host: str,
-        dest_host: str,
-        vm_name: str,
-        sync_options: SyncOptions
+        self, source_host: str, dest_host: str, vm_name: str, sync_options: SyncOptions
     ) -> SyncResult: ...
-    
+
     async def calculate_delta(
-        self,
-        source_host: str,
-        dest_host: str,
-        vm_name: str
+        self, source_host: str, dest_host: str, vm_name: str
     ) -> DeltaInfo: ...
 ```
 
@@ -353,6 +330,7 @@ class VMSynchronizer:
 @dataclass
 class VMInfo:
     """Virtual machine information."""
+
     name: str
     uuid: str
     state: str
@@ -364,25 +342,31 @@ class VMInfo:
     created: datetime
     last_modified: datetime
 
+
 @dataclass
 class DiskInfo:
     """Disk information."""
+
     path: str
     size: int  # bytes
     format: str
     target: str
 
+
 @dataclass
 class NetworkInfo:
     """Network interface information."""
+
     interface: str
     mac_address: str
     network: str
     ip_address: Optional[str] = None
 
+
 @dataclass
 class CloneOptions:
     """Options for cloning operations."""
+
     new_name: Optional[str] = None
     force: bool = False
     dry_run: bool = False
@@ -392,17 +376,21 @@ class CloneOptions:
     preserve_mac: bool = False
     network_config: Optional[Dict[str, Any]] = None
 
+
 @dataclass
 class SyncOptions:
     """Options for sync operations."""
+
     target_name: Optional[str] = None
     checkpoint: bool = False
     delta_only: bool = True
     bandwidth_limit: Optional[str] = None
 
+
 @dataclass
 class ProgressInfo:
     """Progress information for operations."""
+
     operation_id: str
     operation_type: str
     progress_percent: float
@@ -413,9 +401,11 @@ class ProgressInfo:
     status: str
     message: Optional[str] = None
 
+
 @dataclass
 class CloneResult:
     """Result of clone operation."""
+
     operation_id: str
     success: bool
     vm_name: str
@@ -427,9 +417,11 @@ class CloneResult:
     error: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
 
+
 @dataclass
 class SyncResult:
     """Result of sync operation."""
+
     operation_id: str
     success: bool
     vm_name: str
@@ -441,9 +433,11 @@ class SyncResult:
     error: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
 
+
 @dataclass
 class OperationStatus:
     """Status of an operation."""
+
     operation_id: str
     operation_type: str
     status: str  # pending, running, completed, failed, cancelled
@@ -459,71 +453,82 @@ class OperationStatus:
 ```python
 class KVMCloneError(Exception):
     """Base exception for KVM clone operations."""
-    
+
     def __init__(self, message: str, error_code: int = 1000) -> None:
         super().__init__(message)
         self.error_code = error_code
         self.message = message
 
+
 class ConfigurationError(KVMCloneError):
     """Configuration-related errors."""
-    
+
     def __init__(self, message: str) -> None:
         super().__init__(message, error_code=1001)
 
+
 class ConnectionError(KVMCloneError):
     """Connection-related errors."""
-    
+
     def __init__(self, message: str, host: str) -> None:
         super().__init__(f"Connection error to {host}: {message}", error_code=1002)
         self.host = host
 
+
 class VMNotFoundError(KVMCloneError):
     """VM not found errors."""
-    
+
     def __init__(self, vm_name: str, host: str) -> None:
         super().__init__(f"VM '{vm_name}' not found on host '{host}'", error_code=1003)
         self.vm_name = vm_name
         self.host = host
 
+
 class VMExistsError(KVMCloneError):
     """VM already exists errors."""
-    
+
     def __init__(self, vm_name: str, host: str) -> None:
-        super().__init__(f"VM '{vm_name}' already exists on host '{host}'", error_code=1004)
+        super().__init__(
+            f"VM '{vm_name}' already exists on host '{host}'", error_code=1004
+        )
         self.vm_name = vm_name
         self.host = host
 
+
 class InsufficientResourcesError(KVMCloneError):
     """Insufficient resources errors."""
-    
+
     def __init__(self, message: str, resource_type: str) -> None:
         super().__init__(f"Insufficient {resource_type}: {message}", error_code=1005)
         self.resource_type = resource_type
 
+
 class TransferError(KVMCloneError):
     """Data transfer errors."""
-    
+
     def __init__(self, message: str) -> None:
         super().__init__(f"Transfer error: {message}", error_code=1006)
 
+
 class ValidationError(KVMCloneError):
     """Input validation errors."""
-    
+
     def __init__(self, message: str, field: str) -> None:
         super().__init__(f"Validation error for '{field}': {message}", error_code=1007)
         self.field = field
 
+
 class OperationCancelledError(KVMCloneError):
     """Operation cancelled errors."""
-    
+
     def __init__(self, operation_id: str) -> None:
         super().__init__(f"Operation '{operation_id}' was cancelled", error_code=1008)
         self.operation_id = operation_id
 
+
 class LibvirtError(KVMCloneError):
     """Libvirt-related errors."""
-    
+
     def __init__(self, message: str) -> None:
         super().__init__(f"Libvirt error: {message}", error_code=1009)
 ```

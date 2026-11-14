@@ -45,6 +45,7 @@ Used to mark tests that verify compliance with specific requirements:
 ```python
 from tests.conftest import spec
 
+
 @spec("FUNC-1")
 def test_vm_configuration_parsing():
     """Verify VM configuration parsing meets FUNC-1 specification."""

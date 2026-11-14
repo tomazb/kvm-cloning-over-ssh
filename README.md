@@ -197,21 +197,23 @@ kvm-clone config show
 import asyncio
 from kvm_clone import KVMCloneClient, CloneOptions
 
+
 async def clone_vm():
     async with KVMCloneClient() as client:
         result = await client.clone_vm(
             source_host="source.example.com",
-            dest_host="dest.example.com", 
+            dest_host="dest.example.com",
             vm_name="my-vm",
             new_name="my-vm-clone",
             compress=True,
-            verify=True
+            verify=True,
         )
-        
+
         if result.success:
             print(f"Successfully cloned VM: {result.new_vm_name}")
         else:
             print(f"Clone failed: {result.error}")
+
 
 # Run the async function
 asyncio.run(clone_vm())

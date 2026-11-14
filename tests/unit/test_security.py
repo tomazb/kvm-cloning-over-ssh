@@ -1,14 +1,15 @@
 """Comprehensive unit tests for security module."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
-import paramiko
 
-from kvm_clone.security import SecurityValidator, CommandBuilder, SSHSecurity
+import paramiko
+import pytest
+
 from kvm_clone.exceptions import ValidationError
+from kvm_clone.security import CommandBuilder, SecurityValidator, SSHSecurity
 
 
 class TestSecurityValidatorVMName:
@@ -221,15 +222,19 @@ class TestSecurityValidatorSanitizePath:
 
     def test_path_traversal_rejected(self):
         """Test path traversal is rejected."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValidationError, match="Path traversal detected"):
-                SecurityValidator.sanitize_path("../../etc/passwd", tmpdir)
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValidationError, match="Path traversal detected"),
+        ):
+            SecurityValidator.sanitize_path("../../etc/passwd", tmpdir)
 
     def test_absolute_path_outside_base_rejected(self):
         """Test absolute path outside base directory is rejected."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValidationError, match="Path traversal detected"):
-                SecurityValidator.sanitize_path("/etc/passwd", tmpdir)
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValidationError, match="Path traversal detected"),
+        ):
+            SecurityValidator.sanitize_path("/etc/passwd", tmpdir)
 
     def test_empty_path_rejected(self):
         """Test empty path is rejected."""
@@ -375,7 +380,7 @@ class TestKnownHostsPolicy:
     def test_init_with_defaults(self):
         """Test KnownHostsPolicy initializes with default known_hosts path."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = KnownHostsPolicy()
         assert policy._known_hosts_file.endswith("known_hosts")
         assert policy._trusted_hosts == set()
@@ -383,14 +388,14 @@ class TestKnownHostsPolicy:
     def test_init_with_custom_known_hosts(self):
         """Test KnownHostsPolicy uses custom known_hosts file."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = KnownHostsPolicy(known_hosts_file="/custom/known_hosts")
         assert policy._known_hosts_file == "/custom/known_hosts"
 
     def test_init_with_trusted_hosts(self):
         """Test KnownHostsPolicy initializes with trusted hosts."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = KnownHostsPolicy(trusted_hosts={"host1", "host2"})
         assert "host1" in policy._trusted_hosts
         assert "host2" in policy._trusted_hosts
@@ -398,7 +403,7 @@ class TestKnownHostsPolicy:
     def test_add_trusted_host(self):
         """Test adding trusted hosts."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = KnownHostsPolicy()
         policy.add_trusted_host("newhost")
         assert "newhost" in policy._trusted_hosts
@@ -406,30 +411,31 @@ class TestKnownHostsPolicy:
     def test_missing_host_key_trusted_host_passes(self):
         """Test trusted hosts bypass verification."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = KnownHostsPolicy(trusted_hosts={"trustedhost"})
-        
+
         # Mock key - doesn't matter what it is for trusted hosts
         class MockKey:
             def get_name(self):
                 return "ssh-rsa"
-        
+
         # Should not raise for trusted host
         policy.missing_host_key(None, "trustedhost", MockKey())
 
     def test_missing_host_key_unknown_host_rejects(self):
         """Test unknown hosts are rejected."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = KnownHostsPolicy(trusted_hosts=set())
-        
+
         class MockKey:
             def get_name(self):
                 return "ssh-rsa"
-        
+
         # Should raise for unknown host
         with pytest.raises(paramiko.SSHException, match="not found in known hosts"):
             policy.missing_host_key(None, "unknownhost", MockKey())
+
 
 class TestSSHSecurityPolicy:
     """Test SSHSecurity class."""
@@ -441,7 +447,7 @@ class TestSSHSecurityPolicy:
     def test_get_known_hosts_policy(self):
         """Test SSH host key policy is secure."""
         from kvm_clone.security import KnownHostsPolicy
-        
+
         policy = SSHSecurity.get_known_hosts_policy()
         assert policy is not None
         assert isinstance(policy, KnownHostsPolicy)

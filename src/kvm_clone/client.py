@@ -9,26 +9,29 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 from collections.abc import Callable
+from datetime import datetime
+from types import TracebackType
+from typing import Any
 
+from typing_extensions import Self
+
+from .cloner import VMCloner
+from .exceptions import KVMCloneError
+from .libvirt_wrapper import LibvirtWrapper
 from .models import (
     CloneOptions,
-    SyncOptions,
     CloneResult,
-    SyncResult,
     OperationStatus,
-    VMInfo,
-    ProgressInfo,
     OperationStatusEnum,
     OperationType,
+    ProgressInfo,
+    SyncOptions,
+    SyncResult,
+    VMInfo,
 )
-from datetime import datetime
-from .cloner import VMCloner
 from .sync import VMSynchronizer
 from .transport import SSHTransport
-from .libvirt_wrapper import LibvirtWrapper
-from .exceptions import KVMCloneError
 
 
 class KVMCloneClient:
@@ -220,6 +223,7 @@ class KVMCloneClient:
         Returns:
             Dict mapping host names to either lists of VM information or error strings
         """
+
         async def query_host(host: str) -> tuple[str, list[VMInfo] | str]:
             """Query a single host and return result."""
             try:
@@ -227,8 +231,8 @@ class KVMCloneClient:
                     vms = await self.libvirt.list_vms(conn, status_filter)
                     return (host, vms)
             except (KVMCloneError, OSError) as e:
-                error_msg = f"Failed to list VMs: {str(e)}"
-                self.logger.error(f"{error_msg} on {host}", exc_info=True)
+                error_msg = f"Failed to list VMs: {e}"
+                self.logger.exception(f"{error_msg} on {host}")
                 return (host, error_msg)
 
         # Query all hosts concurrently
@@ -285,11 +289,16 @@ class KVMCloneClient:
 
         return failed_ops
 
-    async def __aenter__(self) -> "KVMCloneClient":
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Async context manager exit - cleanup all connections."""
         try:
             # Close all SSH connections
@@ -300,5 +309,5 @@ class KVMCloneClient:
 
             # Also call libvirt's close_all for complete cleanup
             self.libvirt.close_all_connections()
-        except (KVMCloneError, OSError) as e:
-            self.logger.error(f"Error during cleanup: {e}", exc_info=True)
+        except (KVMCloneError, OSError):
+            self.logger.exception("Error during cleanup")

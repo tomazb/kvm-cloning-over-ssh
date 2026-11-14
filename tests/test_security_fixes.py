@@ -3,8 +3,9 @@ Test security fixes to ensure vulnerabilities are properly addressed.
 """
 
 import pytest
-from src.kvm_clone.security import SecurityValidator, CommandBuilder, SSHSecurity
+
 from src.kvm_clone.exceptions import ValidationError
+from src.kvm_clone.security import CommandBuilder, SecurityValidator, SSHSecurity
 
 
 class TestSecurityFixes:
@@ -130,7 +131,7 @@ class TestSecurityFixes:
     def test_ssh_security_policy(self):
         """Test SSH security policy is not AutoAddPolicy."""
         import paramiko
-        
+
         # Reset to get fresh policy
         SSHSecurity.reset_policy()
         policy = SSHSecurity.get_known_hosts_policy()

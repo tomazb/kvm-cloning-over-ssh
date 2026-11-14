@@ -26,9 +26,15 @@ command = f"virsh snapshot-create-as {vm_name} {snapshot_name} 'Pre-sync checkpo
 
 **After**:
 ```python
-command = CommandBuilder.build_safe_command("cp {source} {dest}", source=source_path, dest=dest_path)
-command = CommandBuilder.build_rsync_command(source_path=source_path, dest_path=dest_path, dest_host=dest_host)
-command = CommandBuilder.build_virsh_command("snapshot-create-as", vm_name, snapshot_name, "Pre-sync checkpoint")
+command = CommandBuilder.build_safe_command(
+    "cp {source} {dest}", source=source_path, dest=dest_path
+)
+command = CommandBuilder.build_rsync_command(
+    source_path=source_path, dest_path=dest_path, dest_host=dest_host
+)
+command = CommandBuilder.build_virsh_command(
+    "snapshot-create-as", vm_name, snapshot_name, "Pre-sync checkpoint"
+)
 ```
 
 #### 2. SSH Security Misconfiguration ✅ FIXED

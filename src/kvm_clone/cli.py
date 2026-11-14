@@ -16,10 +16,10 @@ from typing import Any
 import click
 import yaml
 
-from kvm_clone import KVMCloneClient, CloneOptions, SyncOptions
-from kvm_clone.constants import DEFAULT_OPERATION_TIMEOUT
-from kvm_clone.exceptions import KVMCloneError, ConfigurationError
+from kvm_clone import CloneOptions, KVMCloneClient, SyncOptions
 from kvm_clone.config import config_loader
+from kvm_clone.constants import DEFAULT_OPERATION_TIMEOUT
+from kvm_clone.exceptions import ConfigurationError, KVMCloneError
 from kvm_clone.security import SSHSecurity
 
 # ASCII markers for terminal compatibility
@@ -112,7 +112,7 @@ def cli(
 ) -> None:
     """KVM cloning over SSH tool."""
     setup_logging(verbose, quiet, log_level)
-    
+
     # Add trusted hosts to SSH security policy
     for host in trust_host:
         SSHSecurity.add_trusted_host(host)
@@ -169,13 +169,18 @@ def clone(
 ) -> None:
     """Clone a virtual machine from source to destination host."""
 
+    def _load_network_config(path: str) -> Any:
+        with open(path, "r") as handle:
+            return yaml.safe_load(handle)
+
     async def run_clone() -> None:
         try:
-            # Load network config if provided
+            # Read the file in a worker thread so open() does not block the loop
             network_cfg = None
             if network_config:
-                with open(network_config, "r") as f:
-                    network_cfg = yaml.safe_load(f)
+                network_cfg = await asyncio.to_thread(
+                    _load_network_config, network_config
+                )
 
             # Create client
             client_config = ctx.obj["config"].copy()
@@ -309,7 +314,9 @@ def sync(
                     click.echo()  # New line after progress
 
                 if result.success:
-                    click.echo(f"{SUCCESS_MARKER} Successfully synchronized VM '{vm_name}'")
+                    click.echo(
+                        f"{SUCCESS_MARKER} Successfully synchronized VM '{vm_name}'"
+                    )
                     click.echo(f"  Duration: {result.duration:.1f}s")
                     click.echo(f"  Bytes transferred: {result.bytes_transferred}")
                     click.echo(f"  Blocks synchronized: {result.blocks_synchronized}")
@@ -367,6 +374,9 @@ def list_vms(
                 if output_format in ("text", "table"):
                     for host, vms in results.items():
                         click.echo(f"\n{host}:")
+                        if isinstance(vms, str):
+                            click.echo(f"  {ERROR_MARKER} {vms}")
+                            continue
                         if vms:
                             click.echo(
                                 f"{'Name':<20} {'State':<10} {'Memory':<8} {'vCPUs':<6}"
@@ -382,8 +392,11 @@ def list_vms(
                     import json
 
                     # Convert to JSON-serializable format
-                    json_data = {}
+                    json_data: dict[str, Any] = {}
                     for host, vms in results.items():
+                        if isinstance(vms, str):
+                            json_data[host] = {"error": vms}
+                            continue
                         json_data[host] = [
                             {
                                 "name": vm.name,
@@ -409,7 +422,6 @@ def list_vms(
 @cli.group()
 def config() -> None:
     """Manage configuration settings."""
-    pass
 
 
 @config.command("show")

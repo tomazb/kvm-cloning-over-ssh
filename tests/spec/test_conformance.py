@@ -1,6 +1,7 @@
 """Spec conformance tests for KVM cloning requirements."""
 
 import pytest
+
 from tests.conftest import spec
 
 
